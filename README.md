@@ -7,9 +7,9 @@ Rejestru Urbanistycznego, map podkładowych i usług GUGiK, a pliki aktów plano
 przestrzennego (APP) pozwala otwierać, tworzyć i walidować — bez bazy danych
 i bez przełączania się między przeglądarką a QGIS-em.
 
-`Wersja 0.1.0` · `QGIS 4.0+` · `Windows · macOS · Linux` · `GPL-2.0-or-later`
+`Wersja 0.1.1` · `QGIS 4.0+` · `Windows · macOS · Linux` · `GPL-2.0-or-later`
 
-![Walidacja pliku GML APP 3.0 w QGIS](assets/walidacja-app.png)
+![Plan ogólny na mapie z oknem informacji o planie](assets/informacja-o-planie.png)
 
 ## Co potrafi
 
@@ -39,6 +39,8 @@ Plany dodajesz do projektu jednym kliknięciem, z gotowymi stylami — także dl
 ogólnego, gdzie stylowanie idzie za rozporządzeniem. Narzędzie **Informacja o planie**
 (pasek narzędzi) odpowiada na pytanie „co tu obowiązuje?” dla miejsca wskazanego na mapie.
 
+![Karta Plany — akty planistyczne wybranej gminy](assets/panel-plany.png)
+
 ### Pliki APP
 
 Otwieranie, walidacja i konwersja plików aktów planowania przestrzennego, a także kreator
@@ -47,7 +49,9 @@ listy kodowe, OCL) oraz geometrię — poprawność, granicę aktu, nakładanie 
 między nimi. Wynik dostajesz jako listę błędów i ostrzeżeń z przejściem do obiektu na mapie,
 raport CSV i warstwę błędów w projekcie.
 
-![Karta Pliki APP](assets/panel-pliki-app.png)
+![Kreator nowego aktu APP 3.0](assets/nowy-akt-app.png)
+
+![Walidacja pliku GML APP 3.0 w QGIS](assets/walidacja-app.png)
 
 ### GUGiK
 
@@ -97,7 +101,7 @@ działający QGIS trzyma w pamięci kod wtyczki wczytany przy starcie.
 ## Wsparcie
 
 * Błąd albo pomysł: [Issues](../../issues).
-* Kontakt: gsienko@gis-serwer.pl
+* Kontakt: g.sienko@hotmail.com
 
 ## Kod źródłowy
 

@@ -1,8 +1,10 @@
 """Walidacja pliku GML APP względem urzędowego XSD (APP 2.0 / 3.0) — lxml, bez sieci.
 
-Schematy (APP i zależności OGC/W3C) są w ``resources/app/app_xsd.zip`` w ścieżkach
+Schematy (APP i zależności OGC/W3C) są rozpakowane w ``resources/app/xsd`` w układzie
 ``host/ścieżka``; resolver lxml mapuje adresy ``http(s)://host/ścieżka`` z ``schemaLocation``
-na wpisy archiwum, a każde inne odwołanie odrzuca — walidacja nigdy nie sięga do Internetu.
+na pliki tego katalogu, a każde inne odwołanie odrzuca — walidacja nigdy nie sięga do Internetu.
+Pliki leżą w pakiecie wprost (bez archiwum), żeby moderator QGIS Plugin Repository widział,
+co wtyczka zawiera.
 
 Dokument jest sprawdzany jednym schematem łączącym WFS 2.0 i APP: ``wfs:member`` ma model
 „lax”, więc obiekty APP są walidowane ściśle, a błędy mają numery linii pliku.
@@ -14,15 +16,14 @@ działają dalej.
 
 from __future__ import annotations
 
-import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from .app_gml import APP_NAMESPACES, GML, WFS, XLINK, XMLDSIG
 
-XSD_ZIP = Path(__file__).resolve().parent.parent / "resources" / "app" / "app_xsd.zip"
-#: Wersja APP -> (adres schematu APP, plik w archiwum).
+XSD_ROOT = Path(__file__).resolve().parent.parent / "resources" / "app" / "xsd"
+#: Wersja APP -> (adres schematu APP, plik w katalogu schematów).
 APP_SCHEMAS = {
     "2.0": (APP_NAMESPACES["2.0"] + "/planowaniePrzestrzenne_2_0.xsd", "planowaniePrzestrzenne_2_0.xsd"),
     "3.0": (APP_NAMESPACES["3.0"] + "/planowaniePrzestrzenne_3_0.xsd", "planowaniePrzestrzenne_3_0.xsd"),
@@ -69,14 +70,20 @@ class XsdUnavailable(RuntimeError):
 def _resolver_class():
     from lxml import etree
 
-    class ZipResolver(etree.Resolver):
-        """Rozwiązuje adresy schematów wyłącznie na wpisy archiwum ``app_xsd.zip``."""
+    class DirResolver(etree.Resolver):
+        """Rozwiązuje adresy schematów wyłącznie na pliki katalogu ``resources/app/xsd``."""
 
-        def __init__(self, archive: zipfile.ZipFile):
+        def __init__(self, root):
             super().__init__()
-            self._archive = archive
-            self._names = set(archive.namelist())
+            self._root = Path(root).resolve()
             self._roots = {url: name for url, name in APP_SCHEMAS.values()}
+
+        def path(self, name: str) -> Path:
+            """Ścieżka pliku schematu; odrzuca wyjście poza katalog schematów."""
+            path = (self._root / name).resolve()
+            if self._root not in path.parents:
+                raise XsdUnavailable(f"Schemat spoza katalogu wtyczki: {name}")
+            return path
 
         def entry(self, url: str) -> Optional[str]:
             if url in self._roots:
@@ -85,17 +92,17 @@ def _resolver_class():
             if sep and scheme in ("http", "https"):
                 if rest.startswith("www.gov.pl/"):
                     name = rest.rsplit("/", 1)[-1]
-                    return name if name in self._names and name.startswith("planowaniePrzestrzenne_") else None
-                return rest if rest in self._names else None
+                    return name if name.startswith("planowaniePrzestrzenne_") and self.path(name).is_file() else None
+                return rest if self.path(rest).is_file() else None
             return None
 
         def resolve(self, url, public_id, context):
             name = self.entry(url)
             if name is None:
                 raise XsdUnavailable(f"Schemat spoza pakietu wtyczki: {url}")
-            return self.resolve_string(self._archive.read(name), context, base_url=url)
+            return self.resolve_string(self.path(name).read_bytes(), context, base_url=url)
 
-    return ZipResolver
+    return DirResolver
 
 
 def _secure_parser(huge: bool = False):
@@ -111,14 +118,14 @@ def compile_schema(version: str):
     Kompilowany przy każdej walidacji (ok. 0,1 s): obiekty lxml nie mogą przechodzić między
     wątkami — schemat z wątku zadania użyty potem w wątku GUI kończy się naruszeniem pamięci.
 
-    :raises XsdUnavailable: brak lxml, archiwum albo nieobsługiwana wersja.
+    :raises XsdUnavailable: brak lxml, katalogu schematów albo nieobsługiwana wersja.
     """
     if version not in APP_SCHEMAS:
         raise XsdUnavailable(f"Brak XSD dla APP {version}")
     if not lxml_available():
         raise XsdUnavailable("Biblioteka lxml jest niedostępna w tej instalacji QGIS")
-    if not XSD_ZIP.is_file():
-        raise XsdUnavailable(f"Brak pakietu schematów {XSD_ZIP.name}")
+    if not XSD_ROOT.is_dir() or not (XSD_ROOT / APP_SCHEMAS[version][1]).is_file():
+        raise XsdUnavailable(f"Brak schematów APP w {XSD_ROOT.name}")
     from lxml import etree
 
     app_url = APP_SCHEMAS[version][0]
@@ -128,13 +135,12 @@ def compile_schema(version: str):
         f'<xs:import namespace="{APP_NAMESPACES[version]}" schemaLocation="{app_url}"/>'
         "</xs:schema>"
     ).encode()
-    with zipfile.ZipFile(XSD_ZIP) as archive:
-        parser = _secure_parser()
-        parser.resolvers.add(_resolver_class()(archive))
-        try:
-            return etree.XMLSchema(etree.fromstring(wrapper, parser, base_url="file:///gs-mapa-app.xsd"))
-        except (etree.XMLSchemaParseError, etree.XMLSyntaxError) as e:
-            raise XsdUnavailable(f"Nie udało się skompilować XSD APP {version}: {e}") from e
+    parser = _secure_parser()
+    parser.resolvers.add(_resolver_class()(XSD_ROOT))
+    try:
+        return etree.XMLSchema(etree.fromstring(wrapper, parser, base_url="file:///gs-mapa-app.xsd"))
+    except (etree.XMLSchemaParseError, etree.XMLSyntaxError) as e:
+        raise XsdUnavailable(f"Nie udało się skompilować XSD APP {version}: {e}") from e
 
 
 def _short(message: str) -> str:

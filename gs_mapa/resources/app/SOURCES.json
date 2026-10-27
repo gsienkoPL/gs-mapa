@@ -15,5 +15,5 @@
  "extra_files": {
   "apps/api/app/modules/planning/domain/mpzp_designations.py": "4da402ff658ebbed425918f1893313d1aa997a76e4adc9c8e4e92d4526547c08"
  },
- "app_xsd.zip": "669034ba36baf411ca06e2722c543a254c6b08abc4f7ca57157b33c1334d2bda"
+ "app_xsd": "06e8a1b1dd11ea82cb075a18c1c1ffbf91475a415e8eca745799a79a75309eea"
 }
