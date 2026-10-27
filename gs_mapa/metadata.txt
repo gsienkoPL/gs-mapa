@@ -10,9 +10,9 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.1.1
-author=Grzegorz Sienko
-email=g.sienko@hotmail.com
+version=0.1.2
+author=Grzegorz Sieńko
+email=gsienko@gis-serwer.pl
 
 tracker=https://github.com/gsienkoPL/gs-mapa/issues
 repository=https://github.com/gsienkoPL/gs-mapa
@@ -20,7 +20,10 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.1.1 - Package and metadata fixes for the QGIS plugin repository
+changelog=0.1.2 - Author details updated
+    - Author name "Grzegorz Sieńko" (with the Polish diacritic) and contact address
+      gsienko@gis-serwer.pl in metadata.txt and README.
+    0.1.1 - Package and metadata fixes for the QGIS plugin repository
     - Description and about in English, a changelog field, the Web category and English tags.
     - APP XSD schemas shipped as unpacked files instead of the app_xsd.zip archive.
     - Fresh screenshots of the dock, the APP wizard and the validation window.
