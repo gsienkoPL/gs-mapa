@@ -1,0 +1,6 @@
+# Katalog roboczy na archiwa ZIP — do repozytorium trafiają tylko jako assety
+# release'ów, nigdy jako pliki w drzewie.
+dist/
+
+__pycache__/
+*.py[cod]
