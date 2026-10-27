@@ -13,9 +13,9 @@ version=0.1.0
 author=Grzegorz Sienko
 email=g.sienko@hotmail.com
 
-tracker=https://github.com/gsienkoPL/gs-mapa-qgis/issues
-repository=https://github.com/gsienkoPL/gs-mapa-qgis
-homepage=https://github.com/gsienkoPL/gs-mapa-qgis
+tracker=https://github.com/gsienkoPL/gs-mapa/issues
+repository=https://github.com/gsienkoPL/gs-mapa
+homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Vector
 tags=mapa,gs mapa,map,polska
