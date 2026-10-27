@@ -97,7 +97,7 @@ działający QGIS trzyma w pamięci kod wtyczki wczytany przy starcie.
 ## Wsparcie
 
 * Błąd albo pomysł: [Issues](../../issues).
-* Kontakt: g.sienko@hotmail.com
+* Kontakt: gsienko@gis-serwer.pl
 
 ## Kod źródłowy
 
