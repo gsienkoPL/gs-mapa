@@ -1,0 +1,19 @@
+{
+ "repository": "https://github.com/gsienkoPL/CPI-ADM",
+ "path": "apps/api/app/modules/planning/application/resources",
+ "files": {
+  "code_lists/DziennikUrzedowyKod.xml": "f2e10dffbc2538993e8d222ee38feeb1549d88d2022b8a111f6483161ff512e2",
+  "code_lists/LevelOfSpatialPlanValue.rdf": "244e37e32ff68bf55a2d811fd5e92329444f48875484ddd4af2aeec371eb979f",
+  "code_lists/ProcessStepGeneralValue.rdf": "58c94b378273dcaf6e721890418a1ee62174a1812c2bbc0fc00692d5439f668a",
+  "code_lists/RegulationNatureValue.rdf": "a90ddab4e7a2cbbc25bc3a3946b7b3348e8a050d3379c32f66f35736accdbf56",
+  "code_lists/RodzajStrefyPlanistycznejKod.xml": "bf29ac60a23dbf7ce844922f948e1307a04140810d91d716d2d5effeac33cff8",
+  "code_lists/TypAktuPlanowaniaPrzestrzennegoKod.xml": "b2f0ef1241ff0b902294801c5257c51d648f6bf5a8d600885ea2703588558461",
+  "code_lists/gmxCodelists.xml": "d28b147b7f6036eb8f6ae97a83574c747454064afd58cc86a0ffbe237080c572",
+  "schema_packages/app202-official-xsd.zip": "d7d7d52be96ed270898e02049a34de6465523c2abee0b6c03277e4d0678d438d",
+  "schema_packages/app30-official-xsd.zip": "a61f189153dee77072940566d648f71df49a45936b715a1a561dd9cb519b9469"
+ },
+ "extra_files": {
+  "apps/api/app/modules/planning/domain/mpzp_designations.py": "4da402ff658ebbed425918f1893313d1aa997a76e4adc9c8e4e92d4526547c08"
+ },
+ "app_xsd.zip": "669034ba36baf411ca06e2722c543a254c6b08abc4f7ca57157b33c1334d2bda"
+}

@@ -1,0 +1,403 @@
+{
+ "act_types": {
+  "scheme": "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/TypAktuPlanowaniaPrzestrzennegoKod",
+  "values": {
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/TypAktuPlanowaniaPrzestrzennegoKod/miejscowyPlanOdbudowy": "miejscowy plan odbudowy",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/TypAktuPlanowaniaPrzestrzennegoKod/miejscowyPlanRewitalizacji": "miejscowy plan rewitalizacji",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/TypAktuPlanowaniaPrzestrzennegoKod/miejscowyPlanZagospodarowaniaPrzestrzennego": "miejscowy plan zagospodarowania przestrzennego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/TypAktuPlanowaniaPrzestrzennegoKod/planOgolnyGminy": "plan ogólny gminy",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/TypAktuPlanowaniaPrzestrzennegoKod/planZagospodarowaniaPrzestrzennegoWojewodztwa": "plan zagospodarowania przestrzennego województwa",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/TypAktuPlanowaniaPrzestrzennegoKod/studiumUwarunkowanIKierunkowZagospodarowaniaPrzestrzennegoGminy": "studium uwarunkowań i kierunków zagospodarowania przestrzennego gminy",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/TypAktuPlanowaniaPrzestrzennegoKod/zintegrowanyPlanInwestycyjny": "zintegrowany plan inwestycyjny"
+  }
+ },
+ "date_types": {
+  "scheme": "http://standards.iso.org/iso/19139/resources/gmxCodelists.xml#CI_DateTypeCode",
+  "values": [
+   "creation",
+   "publication",
+   "revision"
+  ]
+ },
+ "journals": {
+  "scheme": "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod",
+  "values": {
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikResortowy": "Dziennik urzędowy organu władzy państwowej",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyUniiEuropejskiej": "Dziennik Urzędowy Unii Europejskiej",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojDolnoslaskiego": "Dziennik Urzędowy Woj. Dolnośląskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojKujawskoPomorskiego": "Dziennik Urzędowy Woj. Kujawsko-Pomorskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojLodzkiego": "Dziennik Urzędowy Woj. Łódzkiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojLubelskiego": "Dziennik Urzędowy Woj. Lubelskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojLubuskiego": "Dziennik Urzędowy Woj. Lubuskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojMalopolskiego": "Dziennik Urzędowy Woj. Małopolskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojMazowieckiego": "Dziennik Urzędowy Woj. Mazowieckiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojOpolskiego": "Dziennik Urzędowy Woj. Opolskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojPodkarpackiego": "Dziennik Urzędowy Woj. Podkarpackiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojPodlaskiego": "Dziennik Urzędowy Woj. Podlaskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojPomorskiego": "Dziennik Urzędowy Woj. Pomorskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojSlaskiego": "Dziennik Urzędowy Woj. Śląskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojSwietokrzyskiego": "Dziennik Urzędowy Woj. Świętokrzyskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojWarminskoMazurskiego": "Dziennik Urzędowy Woj. Warmińsko-Mazurskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojWielkopolskiego": "Dziennik Urzędowy Woj. Wielkopolskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUrzedowyWojZachodniopomorskiego": "Dziennik Urzędowy Woj. Zachodniopomorskiego",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/dziennikUstaw": "Dziennik Ustaw",
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/DziennikUrzedowyKod/monitorPolski": "Monitor Polski"
+  }
+ },
+ "levels": {
+  "scheme": "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue",
+  "values": {
+   "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue/infraLocal": "infra-local",
+   "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue/infraRegional": "infra-regional",
+   "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue/local": "local",
+   "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue/national": "national",
+   "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue/other": "other",
+   "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue/regional": "regional",
+   "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue/supraLocal": "supra-local",
+   "http://inspire.ec.europa.eu/codelist/LevelOfSpatialPlanValue/supraRegional": "supra-regional"
+  }
+ },
+ "process_steps": {
+  "scheme": "http://inspire.ec.europa.eu/codelist/ProcessStepGeneralValue",
+  "values": {
+   "http://inspire.ec.europa.eu/codelist/ProcessStepGeneralValue/adoption": "in the process of adoption",
+   "http://inspire.ec.europa.eu/codelist/ProcessStepGeneralValue/elaboration": "under elaboration",
+   "http://inspire.ec.europa.eu/codelist/ProcessStepGeneralValue/legalForce": "legally binding or active",
+   "http://inspire.ec.europa.eu/codelist/ProcessStepGeneralValue/obsolete": "obsolete"
+  }
+ },
+ "profile_labels": {
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-C": "teren cmentarza",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-G": "teren górnictwa i wydobycia",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-H": "teren handlu wielkopowierzchniowego",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I": "teren infrastruktury technicznej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K": "teren komunikacji",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDA": "teren autostrady",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDG": "teren drogi głównej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDR": "teren drogi głównej ruchu przyspieszonego",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDS": "teren drogi ekspresowej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDZ": "teren drogi zbiorczej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KK": "teren komunikacji kolejowej i szynowej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KKL": "teren komunikacji kolei linowej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KL": "teren komunikacji lotniczej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KO": "teren obsługi komunikacji",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KW": "teren komunikacji wodnej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L": "teren lasu",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ML": "teren zabudowy letniskowej lub rekreacji indywidualnej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-MN": "teren zabudowy mieszkaniowej jednorodzinnej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-MW": "teren zabudowy mieszkaniowej wielorodzinnej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-P": "teren produkcji",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEB": "teren biogazowni",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEF": "teren elektrowni słonecznej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEG": "teren elektrowni geotermalnej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEO": "teren elektrowni wodnej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEW": "teren elektrowni wiatrowej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PS": "teren składów i magazynów",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RA": "teren akwakultury i obsługi rybactwa",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RN": "teren rolnictwa z zakazem zabudowy",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RZM": "teren zabudowy zagrodowej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RZP": "teren produkcji w gospodarstwach rolnych",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RZW": "teren wielkotowarowej produkcji rolnej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-U": "teren usług",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UA": "teren usług biurowych i administracji",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UE": "teren usług edukacji",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UG": "teren usług gastronomii",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UH": "teren usług handlu",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UHD": "teren usług handlu detalicznego",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UK": "teren usług kultury i rozrywki",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UL": "teren usług rzemieślniczych",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UN": "teren usług nauki",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UR": "teren usług kultu religijnego",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-US": "teren usług sportu i rekreacji",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UT": "teren usług turystyki",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UZ": "teren usług zdrowia i pomocy społecznej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W": "teren wód",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZB": "teren plaży",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD": "teren ogrodów działkowych",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN": "teren zieleni naturalnej",
+  "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP": "teren zieleni urządzonej"
+ },
+ "regulation_nature": {
+  "scheme": "http://inspire.ec.europa.eu/codelist/RegulationNatureValue",
+  "values": {
+   "http://inspire.ec.europa.eu/codelist/RegulationNatureValue/bindingForDevelopers": "binding for developers",
+   "http://inspire.ec.europa.eu/codelist/RegulationNatureValue/bindingOnlyForAuthorities": "binding only for authorities",
+   "http://inspire.ec.europa.eu/codelist/RegulationNatureValue/definedInLegislation": "defined in legislation",
+   "http://inspire.ec.europa.eu/codelist/RegulationNatureValue/generallyBinding": "generally binding",
+   "http://inspire.ec.europa.eu/codelist/RegulationNatureValue/nonBinding": "not binding"
+  }
+ },
+ "uri_aliases": {
+  "https://inspire.ec.europa.eu/codelist/": "http://inspire.ec.europa.eu/codelist/"
+ },
+ "zones": {
+  "scheme": "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod",
+  "values": {
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaCmentarzy": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UHD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UR",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-C",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "label": "strefa cmentarzy",
+    "symbol": "SC"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaGornictwa": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-P",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UA",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UG",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UH",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UL",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-G",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD"
+    ],
+    "label": "strefa górnictwa",
+    "symbol": "SG"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaGospodarcza": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-U",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-P",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "label": "strefa gospodarcza",
+    "symbol": "SP"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaHandluWielkopowierzchniowego": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEF",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PS",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-U",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-H",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "label": "strefa handlu wielkopowierzchniowego",
+    "symbol": "SH"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaInfrastrukturalna": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-P",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-U",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD"
+    ],
+    "label": "strefa infrastrukturalna",
+    "symbol": "SI"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaKomunikacyjna": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDZ",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UG",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UHD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UT",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDA",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDG",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDR",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KDS",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KK",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KKL",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KL",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KO",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-KW",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD"
+    ],
+    "label": "strefa komunikacyjna",
+    "symbol": "SK"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaOtwarta": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEB",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEF",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEG",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEO",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEW",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "label": "strefa otwarta",
+    "symbol": "SO"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaProdukcjiRolniczej": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEB",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEF",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEO",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEW",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RA",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RZP",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RZW",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD"
+    ],
+    "label": "strefa produkcji rolniczej",
+    "symbol": "SR"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaUslugowa": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEF",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PS",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-U",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "label": "strefa usługowa",
+    "symbol": "SU"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaWielofunkcyjnaZZabudowaMieszkaniowaJednorodzinna": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ML",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-MN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-U",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "label": "strefa wielofunkcyjna z zabudową mieszkaniową jednorodzinną",
+    "symbol": "SJ"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaWielofunkcyjnaZZabudowaMieszkaniowaWielorodzinna": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-H",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-MN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-MW",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-U",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "label": "strefa wielofunkcyjna z zabudową mieszkaniową  wielorodzinną",
+    "symbol": "SW"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaWielofunkcyjnaZZabudowaZagrodowa": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-PEB",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RZW",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-U",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RA",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RZM",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-RZP",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "label": "strefa wielofunkcyjna z zabudową zagrodową",
+    "symbol": "SZ"
+   },
+   "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaZieleniIRekreacji": {
+    "additional_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-L",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UE",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UG",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UHD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UK",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UN",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-US",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UT",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-UZ",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
+    ],
+    "base_profiles": [
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-I",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-K",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-W",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZB",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD",
+     "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
+    ],
+    "label": "strefa zieleni i rekreacji",
+    "symbol": "SN"
+   }
+  }
+ }
+}

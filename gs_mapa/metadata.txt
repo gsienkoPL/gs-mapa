@@ -1,0 +1,25 @@
+[general]
+name=GS Mapa
+qgisMinimumVersion=4.0
+description=GS Mapa: dane Rejestru Urbanistycznego (POG, MPZP, ZPI, PZPW), mapy podkładowe (OpenStreetMap, BDOT10k) i usługi WMS/WMTS/WFS z EZiUDP.
+about=GS Mapa - wtyczka QGIS 4. Panel z zakładkami produktów: Rejestr Urbanistyczny
+    (plany ogólne, miejscowe, zintegrowane i wojewódzkie z kafli PMTiles, informacja o planie,
+    dokumenty), mapy podkładowe OpenStreetMap i BDOT10k z serwera gs-mapa.cloud oraz
+    wyszukiwarka zbiorów Ewidencji Zbiorów i Usług Danych Przestrzennych (EZiUDP, GUGiK)
+    z dodawaniem warstw zgłoszonych usług WMS, WMTS i WFS. Zakładka Pliki APP: dodawanie GPKG/GML
+    aktów planowania przestrzennego ze stylami wtyczki APP i walidacja GML APP 2.0/3.0 (XSD,
+    reguły specyfikacji, geometria) bez bazy danych.
+version=0.1.0
+author=Grzegorz Sienko
+email=g.sienko@hotmail.com
+
+tracker=https://github.com/gsienkoPL/gs-mapa-qgis/issues
+repository=https://github.com/gsienkoPL/gs-mapa-qgis
+homepage=https://github.com/gsienkoPL/gs-mapa-qgis
+
+category=Vector
+tags=mapa,gs mapa,map,polska
+icon=icons/gs_mapa.svg
+experimental=False
+server=False
+hasProcessingProvider=False
