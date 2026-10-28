@@ -45,7 +45,7 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qgis.core import Qgis, QgsApplication, QgsDistanceArea, QgsProject
+from qgis.core import Qgis, QgsApplication, QgsDistanceArea, QgsProject, QgsVectorLayer
 from qgis.gui import QgsFieldComboBox, QgsFileWidget, QgsMapLayerComboBox, QgsMapToolIdentifyFeature
 
 from ..core.act_index import ActIndexEntry
@@ -638,6 +638,9 @@ class AppCreatorDialog(QDialog):
         self._summary_report = None
         #: Akt odczytany ze źródła przy wczytaniu do aktualizacji (wersje obiektów, geometria aktu).
         self._update_source: Optional[ActSource] = None
+        #: Wycięcie obszaru nowego planu (``ui/app_cut_dialog.AppliedCut``): nowy zasięg aktu
+        #: i decyzje dla rysunków; ``build_plan`` bierze je zamiast warstw i formularza rysunków.
+        self._cut = None
         self._update_pending: Optional[str] = None
         self._update_url: Optional[str] = None
         self._update_import: Optional[str] = None
@@ -804,6 +807,18 @@ class AppCreatorDialog(QDialog):
         previous_row.addWidget(QLabel(self.tr("Poprzednia wersja:")))
         previous_row.addWidget(self.previous_output, 1)
         update_layout.addLayout(previous_row)
+        cut_row = QHBoxLayout()
+        self.btn_cut = QPushButton(self.tr("Wytnij obszar nowego planu…"))
+        self.btn_cut.setToolTip(self.tr(
+            "Nowa granica aktu po wycięciu obszaru przejętego przez nowy plan: dziura, wnęka albo podział "
+            "na części oraz przycięte rysunki (GeoTIFF). Wymaga wczytanego aktu do aktualizacji."))
+        self.cut_info = QLabel("")
+        self.cut_info.setWordWrap(True)
+        theme.style_muted(self.cut_info)
+        cut_row.addWidget(self.btn_cut)
+        cut_row.addWidget(self.cut_info, 1)
+        update_layout.addLayout(cut_row)
+        self.btn_cut.clicked.connect(self._open_cut)
         layout.addWidget(update)
 
         template = QGroupBox(self.tr("Wypełnij z pliku GeoPackage"))
@@ -1309,6 +1324,20 @@ class AppCreatorDialog(QDialog):
                                 else self.tr("Najpierw wygeneruj plik GML („Generuj GML”)"))
         # „Przenumeruj oznaczenia…” działa, gdy w zakładce obiektów jest warstwa z mapowaniem.
         sources = getattr(self, "sources", {})
+        if hasattr(self, "btn_cut"):
+            ready = self._update_source is not None
+            self.btn_cut.setEnabled(ready)
+            self.btn_cut.setToolTip(
+                self.tr("Nowa granica aktu po wycięciu obszaru przejętego przez nowy plan: dziura, wnęka "
+                        "albo podział na części oraz przycięte rysunki (GeoTIFF)")
+                if ready else
+                self.tr("Najpierw wczytaj akt do aktualizacji (sekcja „Aktualizacja istniejącego aktu”)"))
+            if self.plan_type.currentData() == POG:
+                self.cut_info.setText(self.tr("wycięcie obszarów planu ogólnego — w przygotowaniu"))
+            elif self._cut is not None:
+                self.cut_info.setText(self._cut.report())
+            else:
+                self.cut_info.setText("")
         if hasattr(self, "btn_numbering"):
             has_layers = any(widget.isChecked() and widget.layer() is not None for widget in sources.values())
             self.btn_numbering.setEnabled(has_layers)
@@ -2211,7 +2240,10 @@ class AppCreatorDialog(QDialog):
                 issues.append(PlanIssue("warning", "Układ", f"warstwa {source_layer.name()} "
                                         f"({source_layer.crs().authid() or '?'}) jest przeliczana do EPSG:{crs} — "
                                         "przeliczenie i zaokrąglenie może wprowadzić luki i nakładania"))
-        if layer is not None:
+        if self._cut is not None:
+            # Wycięcie obszaru nowego planu: granica pochodzi z okna, nie z warstwy projektu.
+            geometry = [list(polygon) for polygon in self._cut.extent]
+        elif layer is not None:
             geometry, found = act_geometry(layer, self.extent_selected.isChecked(), crs,
                                            self.extent_dissolve.isChecked())
             issues += found
@@ -2254,6 +2286,17 @@ class AppCreatorDialog(QDialog):
             effective_from=d.get("effective_from") or effective_from, crs=d.get("crs"), legend=d.get("legend"),
             description=d.get("description"), effective_to=d.get("effective_to"),
         ) for d in self._drawings]
+        drawings = self._cut_drawings(drawings)
+        if self._cut is not None:
+            source = self._source_for_update()
+            if source is not None and source.documents:
+                known = {str(document.get("local_id") or "") for document in source.documents}
+                if not ({(d.get("local_id") or "") for d in self._documents} - known):
+                    issues.append(PlanIssue(
+                        "warning", "Dokumenty",
+                        "Wycięcie obszaru: dodaj nowy dokument formalny (uchwała o zmianie planu albo "
+                        "uchwalenie nowego planu) — nowa wersja aktu nie może opierać się wyłącznie na "
+                        "dotychczasowej uchwale"))
         objects = []
         if pog:
             defaults = ObjectDefaults(
@@ -2284,12 +2327,13 @@ class AppCreatorDialog(QDialog):
 
     @staticmethod
     def _version_issues(report) -> List[PlanIssue]:
-        """Lista obiektów, które dostaną nową wersję, oraz usuniętych i przenumerowanych."""
+        """Lista obiektów, które dostaną nową wersję, oraz wycofanych i przenumerowanych."""
         issues = [PlanIssue("info", name, "nowa wersja obiektu (zmieniona treść)") for name in report.changed]
         issues += [PlanIssue("info", name, "nowy obiekt") for name in report.added]
-        issues += [PlanIssue("info", name, "obiekt usunięty — wersja domknięta w pliku poprzedniej wersji")
-                   for name in report.deleted]
-        issues += [PlanIssue("info", "przenumerowanie", f"{line} — nowy obiekt, poprzedni domknięty")
+        issues += [PlanIssue("info", name, "obiekt wycofany — zostaje bez nowej wersji, z zamkniętym "
+                                           "obowiązywaniem (obowiazujeDo) w pliku nowej wersji")
+                   for name in report.retired]
+        issues += [PlanIssue("info", "przenumerowanie", f"{line} — nowy obiekt, poprzedni wycofany")
                    for line in report.renamed]
         return issues
 
@@ -2570,8 +2614,9 @@ class AppCreatorDialog(QDialog):
 
     def _versioned(self, plan: AppPlan, source: ActSource) -> tuple:
         """
-        Dwa pliki zamiast jednego: nowa wersja (obiekty bez zmian przy swojej wersji) i poprzednia
-        wersja z domkniętymi wersjami aktu, rysunków oraz obiektów zmienionych i usuniętych.
+        Dwa pliki zamiast jednego: nowa wersja (obiekty bez zmian przy swojej wersji, brakujące
+        wycofane) i poprzednia wersja z domkniętymi wersjami aktu, rysunków oraz obiektów
+        zmienionych (wycofanych nie domykamy — ich zamknięcie jest w nowej wersji).
 
         :return: ``(plan nowej wersji, plan poprzedniej wersji, raport)``.
         """
@@ -2597,6 +2642,63 @@ class AppCreatorDialog(QDialog):
             self._log(f"Kreator APP: przenumerowanie {line} — to nowy obiekt, poprzedni zostanie domknięty",
                       "UWAGA")
         return replace(plan, objects=objects.current, drawings=current_drawings), previous, report
+
+    def _open_cut(self) -> None:
+        """Okno „Wytnij obszar nowego planu…”: nowy zasięg aktu i przycięte rysunki."""
+        source = self._source_for_update()
+        if source is None:
+            self._log("Kreator APP: wycięcie obszaru wymaga wczytanego aktu do aktualizacji", "UWAGA")
+            return
+        if self.plan_type.currentData() == POG:
+            QMessageBox.information(
+                self, self.tr("Wytnij obszar nowego planu"),
+                self.tr("Wycięcie obszaru w planie ogólnym jest w przygotowaniu — obszary (OUZ, OZS, "
+                        "OSDIS) opisuje dokument POG, a nie granica aktu."))
+            return
+        from .app_cut_dialog import AppCutDialog
+
+        update_path = str((self._update or {}).get("path") or "")
+        default_dir = str(Path(self.output.filePath() or update_path).parent) if self.output.filePath() \
+            else (str(Path(update_path).parent) if update_path else "")
+        dialog = AppCutDialog(self, source=source, crs=int(self.crs.currentData()),
+                              version_id=self.version_id.text().strip(),
+                              version_start=self._version_start(),
+                              act_title=self.title.text().strip(),
+                              drawings=source.drawings,
+                              default_dir=default_dir,
+                              act_path=update_path)
+        dialog.set_layers([layer for layer in QgsProject.instance().mapLayers().values()
+                           if isinstance(layer, QgsVectorLayer)])
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._cut = dialog.result_cut()
+            if self._cut is not None:
+                self._log(f"Kreator APP: wycięcie obszaru — {self._cut.report()}")
+                for warning in self._cut.warnings:
+                    self._log(f"Kreator APP: wycięcie obszaru — {warning}", "UWAGA")
+                for decision in self._cut.decisions:
+                    if decision.action == "new_version":
+                        self._log(f"Kreator APP: rysunek {decision.local_id} — uzupełnij łącze do "
+                                  f"przyciętego pliku przed zapisem", "UWAGA")
+        self._refresh()
+
+    def _cut_drawings(self, drawings: List[Drawing]) -> List[Drawing]:
+        """Rysunki po wycięciu: przycięte w nowej wersji, wycofane, bez zmian (``opis``/``lacze``)."""
+        if self._cut is None:
+            return drawings
+        by_id = {decision.local_id: decision for decision in self._cut.decisions}
+        result: List[Drawing] = []
+        for drawing in drawings:
+            decision = by_id.get(drawing.identity.local_id)
+            if decision is None or decision.action == "unchanged":
+                result.append(drawing)
+            elif decision.action == "retire":
+                result.append(replace(drawing, version_end=decision.version_end,
+                                      effective_to=decision.effective_to))
+            else:
+                # Nowy plik nie jest publikowany: łącze zostaje puste do czasu publikacji,
+                # a check_plan słusznie wskaże brak adresu (użytkownik uzupełnia go po wgraniu).
+                result.append(replace(drawing, description=decision.description, link=""))
+        return result
 
     def generate(self) -> Optional[str]:
         self._show_required = True
@@ -2644,6 +2746,10 @@ class AppCreatorDialog(QDialog):
         QApplication.restoreOverrideCursor()
         self._result_path = result.path
         shown = issues + result.issues + geometry
+        if self._cut is not None:
+            shown = shown + [PlanIssue("info", self.tr("Wycięcie obszaru"), self._cut.report())]
+            shown = shown + [PlanIssue("info", self.tr("Wycięcie obszaru"), warning)
+                             for warning in self._cut.warnings]
         if report is not None:
             shown = shown + self._version_issues(report)
         self._show_issues(shown)
@@ -2731,6 +2837,7 @@ class AppCreatorDialog(QDialog):
             self.set_unit(unit)
         self._update = dict(state["update"]) if state.get("update") else None
         self._update_source = None
+        self._cut = None
         self._lock_identity(self._update is not None)
         self.previous_output.setText(state.get("previous_output") or "")
         self.namespace.setText(act.get("namespace") or "")

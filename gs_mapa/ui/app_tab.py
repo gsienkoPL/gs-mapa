@@ -33,6 +33,7 @@ from ..core import app_recent
 from ..core.act_index import ActIndexEntry
 from ..core.app_gml import peek_version
 from ..core.app_rules import ERROR, WARNING
+from ..core.app_set import published_keys
 from ..core.units import Unit
 from ..services.app_convert import AppConvertService
 from ..services.app_files import AppFileService
@@ -42,6 +43,7 @@ from . import theme
 from .app_convert_dialog import AppConvertDialog
 from .app_creator_dialog import AppCreatorDialog
 from .app_recent import RecentFilesPanel
+from .app_set_dialog import AppSetDialog
 from .app_template_dialog import AppTemplateDialog
 from .app_validation_dialog import AppValidationDialog
 from .widgets import FlowLayout
@@ -154,6 +156,7 @@ class AppTab(QWidget):
         self._convert_dialog: Optional[AppConvertDialog] = None
         self._creator_dialog: Optional[AppCreatorDialog] = None
         self._template_dialog: Optional[AppTemplateDialog] = None
+        self._set_dialog: Optional[AppSetDialog] = None
         self._unit: Optional[Unit] = None
         self._selected_act: Optional[ActIndexEntry] = None
         self._act_entries: List[ActIndexEntry] = []
@@ -283,9 +286,16 @@ class AppTab(QWidget):
         self.btn_convert.setToolTip(self.tr("Przepisz plik GML APP 1.0 / 2.0 na APP 3.0"))
         row.addWidget(self.btn_convert)
 
+        self.btn_set = QPushButton(self.tr("Zbiór z katalogu…"))
+        theme.set_icon(self.btn_set, "folder", "/mActionFolder.svg")
+        self.btn_set.setToolTip(self.tr("Wskaż katalog z aktami jeszcze nieopublikowanymi: analiza "
+                                        "identyfikatorów i dokumentów w całym zbiorze"))
+        row.addWidget(self.btn_set)
+
         self.btn_add.clicked.connect(self.choose_and_add)
         self.btn_validate.clicked.connect(self._on_validate_clicked)
         self.btn_convert.clicked.connect(self._on_convert_clicked)
+        self.btn_set.clicked.connect(self._on_set_clicked)
         return container
 
     def _build_recent_section(self) -> QWidget:
@@ -346,11 +356,13 @@ class AppTab(QWidget):
             self._creator_dialog.set_unit(unit)
         if self._template_dialog is not None:
             self._template_dialog.set_unit(unit)
+        self._sync_set_dialog()
 
     def set_act_index(self, entries) -> None:
         """Indeks aktów Rejestru (z manifestu GS Mapa) — wyszukiwarka aktu w kreatorze."""
         self._act_entries = list(entries or [])
         self._sync_creator_index()
+        self._sync_set_dialog()
 
     def set_acts_unavailable(self, message: str) -> None:
         """Indeks niedostępny — lista aktów jest na karcie Plany, tu nic do pokazania."""
@@ -359,10 +371,27 @@ class AppTab(QWidget):
         """Szablon adresu plików aktów (``akty/{act_id}.json``) z manifestu — do pobrania aktu w kreatorze."""
         self._acts_url_template = template
         self._sync_creator_index()
+        self._sync_set_dialog()
 
     def _sync_creator_index(self) -> None:
         if self._creator_dialog is not None:
             self._creator_dialog.set_act_index(self._act_entries, self._acts_url_template)
+
+    def _sync_set_dialog(self) -> None:
+        """Okno zbioru dostaje jednostkę, indeks aktów i katalog pobranych danych."""
+        if self._set_dialog is not None:
+            self._set_dialog.set_published(published_keys(self._act_entries))
+            self._set_dialog.set_unit(self._unit, self._act_entries, self._acts_url_template or "",
+                                      self._download_base())
+
+    def _download_base(self) -> str:
+        """Katalog pobranych danych (ustawienie wtyczki); bez niego — katalog profilu QGIS."""
+        base = getattr(self._config, "download_dir", "") if self._config is not None else ""
+        if base:
+            return str(base)
+        from qgis.core import QgsApplication
+
+        return str(Path(QgsApplication.qgisSettingsDirPath()) / "cache" / "gs_mapa" / "akty")
 
     def set_selected_act(self, entry: Optional[ActIndexEntry]) -> None:
         """Akt zaznaczony na karcie Plany (jedna lista aktów) — „Nowa wersja aktu z Rejestru…”."""
@@ -536,6 +565,31 @@ class AppTab(QWidget):
 
     def _on_validate_clicked(self) -> None:
         self.open_validation()
+
+    def _on_set_clicked(self) -> None:
+        self.open_set()
+
+    def open_set(self, folder: Optional[str] = None) -> AppSetDialog:
+        """
+        Okno „Zbiór z katalogu”: analiza identyfikatorów i dokumentów aktów z katalogu.
+
+        :param folder: katalog do przeanalizowania (``None`` = okno bez analizy, wybór w oknie).
+        :return: okno (jedno na kartę, stan zostaje do końca sesji).
+        """
+        if self._set_dialog is None:
+            self._set_dialog = AppSetDialog(
+                self.window(), published=published_keys(self._act_entries),
+                add_file=self.add_file,
+            )
+            self._set_dialog.message.connect(self.message.emit)
+            self._sync_set_dialog()
+        dialog = self._set_dialog
+        if folder:
+            dialog.start(folder)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        return dialog
 
     def _on_convert_clicked(self) -> None:
         self.open_conversion()
@@ -743,7 +797,7 @@ class AppTab(QWidget):
         self._background_validation.cancel()
         self._convert.cancel()
         self._files.cancel()
-        for name in ("_dialog", "_convert_dialog", "_creator_dialog", "_template_dialog"):
+        for name in ("_dialog", "_convert_dialog", "_creator_dialog", "_template_dialog", "_set_dialog"):
             dialog = getattr(self, name)
             if dialog is not None:
                 dialog.close()

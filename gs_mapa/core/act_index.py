@@ -6,7 +6,7 @@ Format pliku opisuje ``docs/format-akty-json.md`` (sekcja „Indeks aktów”).
 
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 #: Obsługiwana wersja formatu indeksu.
@@ -28,6 +28,11 @@ _ACT_ID_RE = re.compile(r"^([a-z]+)-(\d+)$")
 _TERYT_RE = re.compile(r"^\d{2,7}$")
 
 
+#: Kształt przestrzeni nazw zbioru (``przestrzenNazw``) — ten sam co w ``core/app_namespace``
+#: (import z tamtego modułu dałby cykl: ``app_namespace`` -> ``eziudp`` -> ``act_index``).
+_NAMESPACE_RE = re.compile(r"^PL\.ZIPPZP\.\d+/\d{2,7}-[A-Z]+$")
+
+
 @dataclass(frozen=True)
 class ActIndexEntry:
     """Jeden akt z indeksu — dane opisowe bez listy dokumentów."""
@@ -43,6 +48,12 @@ class ActIndexEntry:
     obowiazuje_do: Optional[str] = None
     #: Zasięg aktu ``(min_lon, min_lat, max_lon, max_lat)`` w WGS84 albo ``None``.
     bbox: Optional[Tuple[float, float, float, float]] = None
+    #: Przestrzeń nazw zbioru, do którego akt należy (``PL.ZIPPZP.<nr>/<JPT>-<rodzaj>``)
+    #: albo pusty tekst, gdy indeks jej nie podaje. Umożliwia pracę nad całym zbiorem
+    #: (kontrola unikalności ``lokalnyId`` w przestrzeni nazw) bez pobierania plików aktów.
+    namespace: str = ""
+    #: Adresy danych aktu z indeksu (``gml``, ``gpkg`` → URL); puste, gdy indeks ich nie ma.
+    dane: Dict[str, str] = field(default_factory=dict)
 
 
 def status_label(status: str) -> str:
@@ -120,6 +131,20 @@ def _text(value: Any) -> str:
     return "" if value is None else str(value).strip()
 
 
+def _namespace(value: Any) -> str:
+    """Przestrzeń nazw zbioru z wpisu indeksu — pusty tekst dla złego kształtu."""
+    text = _text(value)
+    return text if _NAMESPACE_RE.match(text) else ""
+
+
+def _dane(value: Any) -> Dict[str, str]:
+    """Adresy danych aktu (``format`` → URL); inne kształty i puste wartości są pomijane."""
+    if not isinstance(value, dict):
+        return {}
+    return {str(key).strip(): str(url).strip() for key, url in value.items()
+            if str(key).strip() and str(url).strip()}
+
+
 def parse_act_index(data: Any) -> List[ActIndexEntry]:
     """
     Parsuje treść pliku indeksu.
@@ -157,6 +182,8 @@ def parse_act_index(data: Any) -> List[ActIndexEntry]:
             obowiazuje_od=_text(item.get("obowiazuje_od")) or None,
             obowiazuje_do=_text(item.get("obowiazuje_do")) or None,
             bbox=_bbox(item.get("bbox")),
+            namespace=_namespace(item.get("przestrzenNazw")),
+            dane=_dane(item.get("dane")),
         ))
     return entries
 

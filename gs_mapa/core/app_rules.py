@@ -372,6 +372,17 @@ def _dates(doc: AppDocument, out: _Collector) -> None:
         valid_from, valid_to = _parse_date(feature.text("obowiazujeOd")), _parse_date(feature.text("obowiazujeDo"))
         if valid_from and valid_to and valid_to < valid_from:
             out.add(rule, WARNING, "obowiazujeDo jest wcześniejsze niż obowiazujeOd.", feature, "obowiazujeDo")
+        # Wycofanie obiektu: ``status=obsolete`` (strefa, regulacja, akt) albo zamknięta wersja
+        # rysunku (rysunek nie ma ``status``). Bez ``obowiazujeDo`` plik nie mówi, do kiedy obiekt
+        # obowiązywał. Domknięcie wersji zastąpionej nowszą wersją nie jest wycofaniem i nie
+        # dostaje ostrzeżenia — dlatego warunek obejmuje ``status`` oraz rysunki, a nie każde
+        # ``koniecWersjiObiektu``.
+        status = _tail(feature.href("status"))
+        marker = ("status obsolete" if status == "obsolete"
+                  else "koniecWersjiObiektu" if (feature.kind == DRAWING and end_text) else "")
+        if marker and not feature.text("obowiazujeDo"):
+            out.add(rule, WARNING, f"Obiekt wycofany ({marker}) bez obowiazujeDo — nie wiadomo, do kiedy "
+                                   f"obowiązuje.", feature, "obowiazujeDo")
 
 
 def _relations(doc: AppDocument, out: _Collector) -> None:

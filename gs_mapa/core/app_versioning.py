@@ -5,9 +5,11 @@ a poprzednia wersja dostaje ``koniecWersjiObiektu``. Przy aktualizacji aktu pows
 pliki:
 
 - **nowy** — akt w nowej wersji, obiekty zmienione i dodane w nowej wersji, obiekty bez zmian
-  z zachowaną wersją źródłową (``wersjaId`` i ``poczatekWersjiObiektu`` bez zmian);
-- **poprzedni** — zawartość źródłowa z domkniętymi wersjami: akt, obiekty zmienione i usunięte
-  dostają ``koniecWersjiObiektu`` równy początkowi nowej wersji.
+  z zachowaną wersją źródłową (``wersjaId`` i ``poczatekWersjiObiektu`` bez zmian) oraz obiekty
+  wycofane (ta sama wersja, ale zamknięte obowiązywanie: ``status=obsolete``/``obowiazujeDo``);
+- **poprzedni** — zawartość źródłowa z domkniętymi wersjami: akt, rysunki i obiekty zmienione
+  dostają ``koniecWersjiObiektu`` równy początkowi nowej wersji. Obiektów wycofanych **nie**
+  domykamy — ich zamknięcie jest w pliku nowej wersji, przy tym samym ``wersjaId``.
 
 Moduł jest czysty (bez QGIS/Qt) — porównuje model zapisu z wersjami odczytanymi z pliku GML.
 """
@@ -42,27 +44,30 @@ class VersionReport:
     unchanged: List[str] = field(default_factory=list)
     changed: List[str] = field(default_factory=list)
     added: List[str] = field(default_factory=list)
-    deleted: List[str] = field(default_factory=list)
+    #: Obiekty wycofane: nie ma ich w nowych danych, ale zostają w pliku nowej wersji — z tym
+    #: samym ``wersjaId`` i zamkniętym obowiązywaniem (``status``/``koniecWersjiObiektu``
+    #: + ``obowiazujeDo``). Wersja nie jest domykana w pliku poprzedniej wersji.
+    retired: List[str] = field(default_factory=list)
     #: Obiekty o tym samym oznaczeniu, ale nowym ``lokalnyId`` (przenumerowanie = nowy obiekt).
     renamed: List[str] = field(default_factory=list)
 
     def merge(self, other: "VersionReport") -> None:
-        for name in ("unchanged", "changed", "added", "deleted", "renamed"):
+        for name in ("unchanged", "changed", "added", "retired", "renamed"):
             getattr(self, name).extend(getattr(other, name))
 
     @property
     def closed(self) -> int:
-        """Liczba wersji domkniętych w pliku poprzedniej wersji."""
-        return len(self.changed) + len(self.deleted)
+        """Liczba wersji domkniętych w pliku poprzedniej wersji (wycofanie wersji nie domyka)."""
+        return len(self.changed)
 
     @property
     def empty(self) -> bool:
-        return not (self.unchanged or self.changed or self.added or self.deleted or self.renamed)
+        return not (self.unchanged or self.changed or self.added or self.retired or self.renamed)
 
     def summary(self) -> str:
         """Krótki opis do komunikatu kreatora."""
         parts = [f"bez zmian: {len(self.unchanged)}", f"zmienione: {len(self.changed)}",
-                 f"nowe: {len(self.added)}", f"usunięte: {len(self.deleted)}"]
+                 f"nowe: {len(self.added)}", f"wycofane: {len(self.retired)}"]
         if self.renamed:
             parts.append(f"przenumerowane: {len(self.renamed)}")
         return ", ".join(parts)
@@ -119,10 +124,16 @@ def _canonical_rings(rings: Sequence[Sequence[Tuple[float, float]]], digits: Opt
 
 
 def _object_values(obj: SpatialObject) -> tuple:
-    """Atrybuty obiektu bez identyfikatora i dat wersji (te zmieniają się przy każdej wersji)."""
+    """
+    Atrybuty obiektu bez identyfikatora, dat wersji i pól zamknięcia.
+
+    ``status`` i ``obowiazujeDo`` opisują *zamknięcie* wersji, a nie jej treść: wycofanie obiektu
+    (``status=obsolete`` + ``obowiazujeDo``) nie może udawać zmiany treści ani odwrotnie — obiekt
+    bez zmian, któremu ktoś dopisał datę końca, nie dostaje nowej wersji.
+    """
     return (
-        obj.designation, obj.symbol, obj.name, obj.alt_name, obj.status, obj.nature,
-        obj.effective_from, obj.effective_to,
+        obj.designation, obj.symbol, obj.name, obj.alt_name, obj.nature,
+        obj.effective_from,
         tuple(sorted(obj.base_profiles)), tuple(sorted(obj.extra_profiles)),
         bool(obj.exclude_farmstead) if obj.exclude_farmstead is not None else None,
         tuple(sorted(((key, _number_or_text(value)) for key, value in obj.measures.items()),
@@ -132,20 +143,31 @@ def _object_values(obj: SpatialObject) -> tuple:
 
 def same_object(source: SpatialObject, obj: SpatialObject) -> bool:
     """Czy obiekt z warstwy opisuje tę samą treść co wersja źródłowa (bez identyfikatora wersji)."""
-    if source.kind != obj.kind:
-        return False
-    if _object_values(source) != _object_values(obj):
-        return False
-    return _canonical_rings(source.geometry) == _canonical_rings(obj.geometry)
+    return source.kind == obj.kind and object_signature(source) == object_signature(obj)
 
 
-def _keep_version(obj: SpatialObject, source: SpatialObject) -> SpatialObject:
-    """Obiekt bez zmian: zostaje przy swojej wersji źródłowej (``wersjaId`` i początek)."""
-    return replace(obj, identity=Identity(obj.identity.namespace, obj.identity.local_id, source.identity.version_id),
-                   version_start=source.version_start or obj.version_start, version_end=source.version_end)
+def object_signature(obj: SpatialObject) -> tuple:
+    """
+    Treść obiektu bez identyfikatora i dat wersji — do porównań w jednym pliku i w całym zbiorze.
+
+    Ten sam podpis przy różnych ``lokalnyId`` oznacza zdublowany obiekt, a różny podpis przy
+    tym samym ``lokalnyId`` — kolizję identyfikatora (dwa obiekty o jednym id).
+    """
+    return (_object_values(obj), _canonical_rings(obj.geometry))
 
 
 Versioned = TypeVar("Versioned", SpatialObject, Drawing)
+
+
+def _keep_version(obj: Versioned, source: Versioned) -> Versioned:
+    """
+    Obiekt bez zmian: zostaje przy swojej wersji źródłowej (``wersjaId`` i początek).
+
+    Pola zamknięcia (``status``, ``obowiazujeDo``, ``koniecWersjiObiektu``) bierzemy z **nowego**
+    obiektu — inaczej domknięcie dopisane w formularzu zniknęłoby przy „bez zmian”.
+    """
+    return replace(obj, identity=Identity(obj.identity.namespace, obj.identity.local_id, source.identity.version_id),
+                   version_start=source.version_start or obj.version_start)
 
 
 def _close(obj: Versioned, version_end: str) -> Versioned:
@@ -153,18 +175,43 @@ def _close(obj: Versioned, version_end: str) -> Versioned:
     return replace(obj, version_end=version_end)
 
 
+def _retire_object(obj: SpatialObject, retire_date: str) -> SpatialObject:
+    """
+    Wycofanie obiektu bez nowej wersji: ten sam ``wersjaId``, ``status=obsolete`` i ``obowiazujeDo``.
+
+    Obiekt zostaje w pliku nowej wersji (nadal wskazany przez akt), a jego wersja **nie** jest
+    domykana w pliku poprzedniej wersji — inaczej ta sama wersja miałaby w obu plikach różny
+    ``koniecWersjiObiektu``.
+    """
+    return replace(obj, status="obsolete", effective_to=retire_date)
+
+
+def _retire_drawing(drawing: Drawing, version_end: str, retire_date: str) -> Drawing:
+    """
+    Wycofanie rysunku bez nowej wersji: ten sam ``wersjaId``, ``koniecWersjiObiektu`` (początek
+    nowej wersji aktu) i ``obowiazujeDo``. Rysunek w APP 3.0 nie ma ``status``.
+    """
+    return replace(drawing, version_end=version_end, effective_to=retire_date)
+
+
 # --- uzgadnianie -----------------------------------------------------------------
 
 
 def reconcile_objects(source_objects: Sequence[SpatialObject], objects: Sequence[SpatialObject],
-                      version_start: str) -> ReconcileResult:
+                      version_start: str, retire_date: Optional[str] = None) -> ReconcileResult:
     """
     Porównuje obiekty z warstwy z wersjami źródłowymi i rozdziela je między dwa pliki.
+
+    Obiekt, którego nie ma w nowych danych, **nie wypada** z pliku: zostaje w nowej wersji
+    wycofany (ten sam ``wersjaId``, ``status=obsolete``, ``obowiazujeDo``), bo APP wycofuje
+    obiekty przez zamknięcie wersji, a nie przez usunięcie z pliku.
 
     :param source_objects: wersje źródłowe (``read_act_source(...).objects``).
     :param objects: obiekty z warstw, z nowym ``wersjaId`` i początkiem wersji.
     :param version_start: początek nowej wersji aktu (``poczatekWersjiObiektu``) — data domknięcia
         poprzednich wersji.
+    :param retire_date: ``obowiazujeDo`` dla obiektów wycofanych; domyślnie początek nowej wersji
+        aktu (użytkownik może podać inną datę w oknie).
     """
     report = VersionReport()
     source_by_key: Dict[Tuple[str, str], SpatialObject] = {
@@ -184,22 +231,26 @@ def reconcile_objects(source_objects: Sequence[SpatialObject], objects: Sequence
         else:
             report.changed.append(label(obj))
             current.append(obj)
-    deleted_objects = [obj for key, obj in source_by_key.items() if key not in seen]
-    report.deleted = [label(obj) for obj in deleted_objects]
-    report.renamed.extend(_renamed(deleted_objects, objects, source_by_key))
-    ended = set(report.changed) | set(report.deleted)
+    missing = [obj for key, obj in source_by_key.items() if key not in seen]
+    report.retired = [label(obj) for obj in missing]
+    report.renamed.extend(_renamed(missing, objects, source_by_key))
+    retired_date = retire_date or version_start
+    current.extend(_retire_object(obj, retired_date) for obj in missing)
+    # Wycofanych nie domykamy w pliku poprzedniej wersji — domknięcie (status/obowiazujeDo)
+    # jest w pliku nowej wersji, przy tym samym wersjaId.
+    ended = set(report.changed)
     previous = [_close(obj, version_start) if label(obj) in ended else obj for obj in source_objects]
     return ReconcileResult(current=current, previous=previous, report=report)
 
 
-def _renamed(deleted: Sequence[SpatialObject], objects: Sequence[SpatialObject],
+def _renamed(missing: Sequence[SpatialObject], objects: Sequence[SpatialObject],
              source_by_key: Dict[Tuple[str, str], SpatialObject]) -> List[str]:
     """
     Przenumerowanie: obiekt zniknął pod starym ``lokalnyId``, a pojawił się pod nowym z tym samym
     oznaczeniem. Zgodnie z zasadami APP to nowy obiekt (stary zostaje wycofany), a nie nowa wersja.
     """
     by_designation: Dict[Tuple[str, str], List[SpatialObject]] = {}
-    for obj in deleted:
+    for obj in missing:
         by_designation.setdefault((obj.kind, obj.designation), []).append(obj)
     renamed = []
     for obj in objects:
@@ -214,20 +265,35 @@ def _renamed(deleted: Sequence[SpatialObject], objects: Sequence[SpatialObject],
 
 
 def same_drawing(source: Drawing, drawing: Drawing, crs: int) -> bool:
-    """Czy rysunek z formularza opisuje tę samą treść co wersja źródłowa."""
-    def values(item: Drawing):
-        return (item.title.strip(), item.link.strip(), item.legend, item.description,
-                (item.crs or f"EPSG:{crs}").strip().upper(), int(item.scale),
-                item.effective_from, item.effective_to)
+    """
+    Czy rysunek z formularza opisuje tę samą treść co wersja źródłowa.
 
-    return values(source) == values(drawing)
+    Pola zamknięcia (``obowiazujeDo`` i ``koniecWersjiObiektu``) nie są treścią: wycofanie rysunku
+    zmienia tylko jego obowiązywanie, a nie dane arkusza.
+    """
+    return drawing_signature(source, crs) == drawing_signature(drawing, crs)
+
+
+def drawing_signature(drawing: Drawing, crs: int) -> tuple:
+    """
+    Treść rysunku bez identyfikatora i pól zamknięcia — do porównań w pliku i w całym zbiorze.
+
+    :param crs: układ aktu, przyjmowany, gdy rysunek nie podaje własnego.
+    """
+    return (drawing.title.strip(), drawing.link.strip(), drawing.legend, drawing.description,
+            (drawing.crs or f"EPSG:{crs}").strip().upper(), int(drawing.scale), drawing.effective_from)
 
 
 def reconcile_drawings(source_drawings: Sequence[Drawing], drawings: Sequence[Drawing], version_start: str,
-                       crs: int) -> Tuple[List[Drawing], List[Drawing], VersionReport]:
+                       crs: int, retire_date: Optional[str] = None) -> Tuple[List[Drawing], List[Drawing], VersionReport]:
     """
-    Rysunki: bez zmian zostają przy wersji źródłowej, zmienione i usunięte są domykane.
+    Rysunki: bez zmian zostają przy wersji źródłowej, zmienione są domykane, brakujące — wycofywane.
 
+    Rysunek, którego nie ma w nowych danych, zostaje w pliku nowej wersji wycofany: ten sam
+    ``wersjaId``, ``koniecWersjiObiektu`` = początek nowej wersji aktu i ``obowiazujeDo``
+    (w APP 3.0 rysunek nie ma ``status``). W pliku poprzedniej wersji nie jest domykany.
+
+    :param retire_date: ``obowiazujeDo`` dla rysunków wycofanych; domyślnie początek nowej wersji.
     :return: ``(rysunki do nowego pliku, rysunki do pliku poprzedniej wersji, raport)``.
     """
     report = VersionReport()
@@ -243,14 +309,15 @@ def reconcile_drawings(source_drawings: Sequence[Drawing], drawings: Sequence[Dr
             current.append(drawing)
         elif same_drawing(source, drawing, crs):
             report.unchanged.append(label(drawing))
-            current.append(replace(
-                drawing, identity=Identity(drawing.identity.namespace, local_id, source.identity.version_id),
-                version_start=source.version_start or drawing.version_start, version_end=source.version_end))
+            current.append(_keep_version(drawing, source))
         else:
             report.changed.append(label(drawing))
             current.append(drawing)
-    report.deleted = [f"rysunek {local_id}" for local_id in source_by_id if local_id not in seen]
-    ended = set(report.changed) | set(report.deleted)
+    missing = [drawing for local_id, drawing in source_by_id.items() if local_id not in seen]
+    report.retired = [label(drawing) for drawing in missing]
+    retired_date = retire_date or version_start
+    current.extend(_retire_drawing(drawing, version_start, retired_date) for drawing in missing)
+    ended = set(report.changed)
     previous = [_close(drawing, version_start) if label(drawing) in ended else drawing
                 for drawing in source_drawings]
     return current, previous, report
@@ -285,9 +352,10 @@ def _same_content(previous: SpatialObject, current: SpatialObject) -> bool:
 
 
 def _drawing_content(drawing: dict) -> tuple:
+    """Treść rysunku bez pól zamknięcia (``obowiazujeDo`` i ``koniecWersjiObiektu``)."""
     return (str(drawing.get("title") or "").strip(), str(drawing.get("link") or "").strip(),
             drawing.get("legend"), drawing.get("description"), str(drawing.get("crs") or "").strip().upper(),
-            int(drawing.get("scale") or 0), drawing.get("effective_from"), drawing.get("effective_to"))
+            int(drawing.get("scale") or 0), drawing.get("effective_from"))
 
 
 def compare_versions(previous: "ActSource", current: "ActSource") -> List[Finding]:
@@ -322,25 +390,47 @@ def compare_versions(previous: "ActSource", current: "ActSource") -> List[Findin
     _transition(old_act.get("version_end"), new_act.get("version_start"),
                 old_act.get("version_id"), new_act.get("version_id"), act_label, add)
 
+    # Nowa wersja aktu powstaje na mocy nowego dokumentu formalnego (przystąpienie, uchwalenie,
+    # zmiana). Powtórzenie dokumentów poprzedniej wersji znaczy, że w pliku brakuje uchwały,
+    # która tę zmianę wprowadza.
+    old_documents = {str(values.get("local_id") or "") for values in previous.documents}
+    new_documents = {str(values.get("local_id") or "") for values in current.documents}
+    if old_act.get("version_id") != new_act.get("version_id") and old_documents \
+            and not (new_documents - old_documents):
+        add(WARNING, "Nowa wersja aktu nie ma nowego dokumentu formalnego — zmiana planu wymaga nowej "
+                     "uchwały (przystąpienie, uchwalenie, zmiana), a plik powtarza dokumenty poprzedniej "
+                     "wersji.", act_label, "dokumentUchwalajacy")
+
     previous_objects = {(obj.kind, obj.identity.local_id): obj for obj in previous.objects}
     current_objects = {(obj.kind, obj.identity.local_id): obj for obj in current.objects}
-    deleted = []
+    missing: List[SpatialObject] = []
     for key, old in previous_objects.items():
         new = current_objects.get(key)
         name = label(old)
         if new is None:
-            deleted.append(old)
-            if not old.version_end:
-                add(ERROR, f"{name}: obiektu nie ma w nowej wersji, a jego wersja nie jest domknięta "
-                           f"(koniecWersjiObiektu).", name, "koniecWersjiObiektu")
+            missing.append(old)
+            # Wycofanie obiektu to zamknięcie wersji w pliku nowej wersji (status obsolete
+            # i obowiazujeDo), a nie usunięcie obiektu z pliku.
+            if old.version_end:
+                add(WARNING, f"{name}: brak w nowej wersji (wersja {old.identity.version_id} domknięta "
+                             f"{old.version_end}) — wycofanie wymaga zamknięcia wersji, a nie usunięcia "
+                             f"obiektu z pliku.", name, "koniecWersjiObiektu")
             else:
-                add(INFO, f"{name}: obiekt usunięty — wersja {old.identity.version_id} domknięta "
-                          f"({old.version_end}).", name)
+                add(WARNING, f"{name}: brak w nowej wersji, a wersja {old.identity.version_id} nie jest "
+                             f"domknięta — wycofanie wymaga zamknięcia wersji, a nie usunięcia obiektu "
+                             f"z pliku.", name, "koniecWersjiObiektu")
             continue
         if old.identity.version_id == new.identity.version_id:
             if not _same_content(old, new):
                 add(ERROR, f"{name}: wersja {old.identity.version_id} ma inną treść w obu plikach — "
                            f"zmiana treści wymaga nowego wersjaId.", name, "idIIP.wersjaId")
+            elif new.status == "obsolete" and old.status != "obsolete":
+                add(INFO, f"{name}: wycofany (wersja {old.identity.version_id} zachowana, status obsolete, "
+                          f"obowiazujeDo: {new.effective_to or 'brak'}).", name)
+            elif old.status == "obsolete" and new.status != "obsolete":
+                add(WARNING, f"{name}: wersja {old.identity.version_id} była wycofana, a w nowej wersji "
+                             f"znów obowiązuje — cofnięcie wycofania wymaga nowej wersji obiektu.",
+                    name, "status")
             continue
         _transition(old.version_end, new.version_start, old.identity.version_id,
                     new.identity.version_id, name, add)
@@ -351,7 +441,7 @@ def compare_versions(previous: "ActSource", current: "ActSource") -> List[Findin
     added = [obj for key, obj in current_objects.items() if key not in previous_objects]
     for new in added:
         add(INFO, f"{label(new)}: nowy obiekt (wersja {new.identity.version_id}).", label(new))
-    for line in _renamed(deleted, added, previous_objects):
+    for line in _renamed(missing, added, previous_objects):
         add(INFO, f"Przenumerowanie: {line} — to nowy obiekt, poprzedni jest domknięty.", line)
 
     previous_drawings = {str(values.get("local_id") or ""): values for values in previous.drawings}
@@ -360,16 +450,23 @@ def compare_versions(previous: "ActSource", current: "ActSource") -> List[Findin
         new = current_drawings.get(local_id)
         name = f"rysunek {local_id}"
         if new is None:
-            if not old.get("version_end"):
-                add(ERROR, f"{name}: rysunku nie ma w nowej wersji, a jego wersja nie jest domknięta.",
+            if old.get("version_end"):
+                add(WARNING, f"{name}: brak w nowej wersji (wersja domknięta {old.get('version_end')}) — "
+                             f"wycofanie wymaga zamknięcia wersji, a nie usunięcia rysunku z pliku.",
                     name, "koniecWersjiObiektu")
             else:
-                add(INFO, f"{name}: rysunek usunięty — wersja domknięta ({old.get('version_end')}).", name)
+                add(WARNING, f"{name}: brak w nowej wersji, a wersja nie jest domknięta — wycofanie "
+                             f"wymaga zamknięcia wersji, a nie usunięcia rysunku z pliku.",
+                    name, "koniecWersjiObiektu")
             continue
         if old.get("version_id") == new.get("version_id"):
             if _drawing_content(old) != _drawing_content(new):
                 add(ERROR, f"{name}: wersja {old.get('version_id')} ma inną treść w obu plikach — "
                            f"zmiana treści wymaga nowego wersjaId.", name, "idIIP.wersjaId")
+            elif new.get("version_end") and not old.get("version_end"):
+                add(INFO, f"{name}: wycofany (wersja {old.get('version_id')} zachowana, "
+                          f"koniecWersjiObiektu {new.get('version_end')}, obowiazujeDo: "
+                          f"{new.get('effective_to') or 'brak'}).", name)
             continue
         _transition(old.get("version_end"), new.get("version_start"), old.get("version_id"),
                     new.get("version_id"), name, add)

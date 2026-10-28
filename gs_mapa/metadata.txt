@@ -10,7 +10,7 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.1.2
+version=0.1.4
 author=Grzegorz Sieńko
 email=gsienko@gis-serwer.pl
 
@@ -20,7 +20,27 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.1.2 - Author details updated
+changelog=0.1.4 - Cutting a new plan area and whole-set checks
+    - "Wytnij obszar nowego planu…" for local plans: a new act boundary from a new plan
+      GML file or a project layer, GeoTIFF drawings cropped to the new boundary, and
+      drawings retired or re-versioned with a note about the cut.
+    - Objects that are no longer in the new data are retired instead of removed:
+      same wersjaId, status obsolete and an end of validity date.
+    - "Zbiór z katalogu…": identifier checks across a whole set before publication
+      (namespace collisions, shared objects, duplicates, already published acts).
+    - "Pobierz z Rejestru…": all acts of a unit downloaded from the Register index
+      into a working folder in one go and analysed as a set.
+    - Act index entries carry data addresses (gml, gpkg) and the set namespace.
+    0.1.3 - Template GeoPackage and APP wizard
+    - The template GeoPackage supplies form cards, field hints, defaults and constraints;
+      zone profiles are filtered by zone kind and the primary profile is computed.
+    - Creator: geometry checks before saving (gaps, overlaps, act boundary), document and
+      drawing links, repeated designations, one-click fixes and field counters.
+    - Organ, journal and effective date taken from the unit and the resolution; minimum
+      PBC share from the regulation; "Waliduj" action in the act menu of the Plans tab.
+    - "Wczytaj z pliku" wizard for GPKG table editing, act identification in GPKG and GML
+      layers, status and version of an object uniform for the whole act.
+    0.1.2 - Author details updated
     - Author name "Grzegorz Sieńko" (with the Polish diacritic) and contact address
       gsienko@gis-serwer.pl in metadata.txt and README.
     0.1.1 - Package and metadata fixes for the QGIS plugin repository

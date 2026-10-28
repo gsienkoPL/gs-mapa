@@ -385,6 +385,8 @@ def check_plan(plan: AppPlan, codes: Optional[dict] = None) -> List[PlanIssue]:
     version_dates(where, act.version_start, act.version_end)
     date(where, "obowiazujeOd", act.effective_from)
     date(where, "obowiazujeDo", act.effective_to, required=False)
+    if act.status == "obsolete" and not act.effective_to:
+        warning(where, "akt archiwalny (status obsolete) bez obowiazujeDo — nie wiadomo, do kiedy obowiązuje")
     pog = act.plan_type == POG
     if pog and act.modification is None:
         error(where, "plan ogólny wymaga atrybutu modyfikacja (OCL ACT-06)")
@@ -473,6 +475,9 @@ def check_plan(plan: AppPlan, codes: Optional[dict] = None) -> List[PlanIssue]:
         version_dates(where, drawing.version_start, drawing.version_end)
         date(where, "obowiazujeOd", drawing.effective_from)
         date(where, "obowiazujeDo", drawing.effective_to, required=False)
+        if drawing.version_end and not drawing.effective_to:
+            warning(where, "rysunek wycofany (koniecWersjiObiektu) bez obowiazujeDo — nie wiadomo, "
+                           "do kiedy obowiązuje")
     if act.status == "legalForce" and not plan.drawings and not plan.objects:
         error("Rysunki", "obowiązujący akt bez stref i regulacji musi mieć rysunek (OCL ACT-07)", "drawing")
 
@@ -504,6 +509,9 @@ def check_plan(plan: AppPlan, codes: Optional[dict] = None) -> List[PlanIssue]:
         date(where, "obowiazujeDo", obj.effective_to, required=False)
         if obj.status not in STATUSES:
             error(where, f"nieznany status „{obj.status}”")
+        if obj.status == "obsolete" and not obj.effective_to:
+            warning(where, "obiekt wycofany (status obsolete) bez obowiazujeDo — nie wiadomo, "
+                           "do kiedy obowiązuje")
         if obj.nature not in NATURES:
             error(where, f"nieznany charakter ustalenia „{obj.nature}”")
         polygon(where, obj.geometry, True)
