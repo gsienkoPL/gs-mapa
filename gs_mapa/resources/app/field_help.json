@@ -1,0 +1,839 @@
+{
+ "source": "planowaniePrzestrzenne_3_0.xsd",
+ "generated_by": "scripts/build_field_help.py",
+ "layers": {
+  "AktPlanowaniaPrzestrzennego": {
+   "przestrzenNazw": {
+    "label": "przestrzeń nazw",
+    "description": "Przestrzeń nazw identyfikująca w sposób jednoznaczny źródło danych obiektu przestrzennego, o której mowa w § 6 ust. 1 pkt 1 rozporządzenia. Wartość atrybutu przestrzeń nazw powinna jednoznacznie identyfikować zbiór danych przestrzennych, do którego należy instancja typu obiektu.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "lokalnyId": {
+    "label": "identyfikator lokalny",
+    "description": "Identyfikator lokalny obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 2 rozporządzenia, przypisany przez dostawcę danych. Unikalność identyfikatora w przestrzeni nazw gwarantuje dostawca zbioru danych przestrzennych.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "wersjaId": {
+    "label": "identyfikator wersji",
+    "description": "Identyfikator poszczególnej wersji obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 3 rozporządzenia, przypisany przez dostawcę danych. W zestawie wszystkich wersji danego obiektu identyfikator wersji jest unikalny.",
+    "type": "string",
+    "required": false,
+    "from": "IdentyfikatorType"
+   },
+   "poczatekWersjiObiektu": {
+    "label": "początek wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została wprowadzona do zbioru danych przestrzennych lub zmieniona w tym zbiorze danych przestrzennych.",
+    "type": "dateTime",
+    "required": true,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "koniecWersjiObiektu": {
+    "label": "koniec wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została zastąpiona w zbiorze danych przestrzennych lub wycofana z tego zbioru danych przestrzennych.",
+    "type": "dateTime",
+    "required": false,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "tytul": {
+    "label": "tytuł",
+    "description": "Oficjalny tytuł aktu planowania przestrzennego lub jego projektu.",
+    "type": "string",
+    "required": true,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "tytulAlternatywny": {
+    "label": "tytuł alternatywny",
+    "description": "Alternatywny (nieoficjalny) tytuł aktu planowania przestrzennego lub jego projektu.",
+    "type": "string",
+    "required": false,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "typPlanu": {
+    "label": "typ planu",
+    "description": "Formalna nazwa typu aktu planowania przestrzennego lub jego projektu.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "poziomHierarchii": {
+    "label": "poziom w hierarchii",
+    "description": "Poziom aktu planowania przestrzennego w hierarchii terytorialnej. Dla poszczególnych typów aktów planowania przestrzennego atrybut przyjmuje następujące wartości: 1) Plan zagospodarowania przestrzennego województwa – regionalny; 2) Plan ogólny gminy – lokalny; 3) Miejscowy plan zagospodarowania przestrzennego – sublokalny; 4) Zintegrowany plan inwestycyjny – sublokalny; 5) Miejscowy plan rewitalizacji – sublokalny; 6) Audyt krajobrazowy – regionalny; 7) Uchwała krajobrazowa – sublokalny. Dla miejscowego planu odbudowy obiektów budowlanych atrybut przyjmuje wartość – sublokalny.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "obowiazujeOd": {
+    "label": "obowiązuje od",
+    "description": "Data, od której dana wersja obiektu przestrzennego obowiązuje.",
+    "type": "date",
+    "required": true,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "obowiazujeDo": {
+    "label": "obowiązuje do",
+    "description": "Data, do której dana wersja obiektu przestrzennego obowiązywała.",
+    "type": "date",
+    "required": false,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "status": {
+    "label": "status",
+    "description": "Ogólne wskazanie etapu procesu planowania, na którym znajduje się wersja aktu planowania przestrzennego lub jego projektu.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "zmiana": {
+    "label": "zmiana",
+    "description": "Informacja o liczbie zmian aktu planowania przestrzennego lub wydanych dla niego rozstrzygnięć nadzorczych lub wyroków sądowych.",
+    "type": "integer",
+    "required": false,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "modyfikacja": {
+    "label": "modyfikacja",
+    "description": "Informacja, czy dana wersja aktu planowania przestrzennego obowiązuje w części – nie obejmuje całego obszaru, który jest objęty aktem planowania przestrzennego lub jego projektem (np. w wyniku uchylenia, unieważnienia).",
+    "type": "boolean",
+    "required": false,
+    "from": "AktPlanowaniaPrzestrzennegoType"
+   },
+   "mapaPodkladowa_data": {
+    "label": "mapa podkładowa: data",
+    "description": "Data aktualności lub opracowania użytej mapy podkładowej. Należy podać datę aktualności użytej mapy podkładowej, a w przypadku braku tej daty, należy podać datę opracowania mapy podkładowej.",
+    "type": "date",
+    "required": true,
+    "from": "MapaPodkladowaType"
+   },
+   "mapaPodkladowa_referencja": {
+    "label": "mapa podkładowa: referencja",
+    "description": "Odniesienie do użytej mapy podkładowej.",
+    "type": "string",
+    "required": true,
+    "from": "MapaPodkladowaType"
+   },
+   "mapaPodkladowa_lacze": {
+    "label": "mapa podkładowa: łącze",
+    "description": "Łącze (adres URI), pod którym udostępniona jest mapa podkładowa.",
+    "type": "anyURI",
+    "required": false,
+    "from": "MapaPodkladowaType"
+   }
+  },
+  "DokumentFormalny": {
+   "rola": {
+    "label": "rola dokumentu",
+    "description": "Rola dokumentu względem aktu: uchwalenie, przystąpienie do sporządzania, zmiana, uchylenie, unieważnienie albo inny dokument. W schemacie APP to pięć osobnych relacji (uchwala, przystapienie, zmienia, uchyla, uniewaznia); w pliku edytowalnym zastępuje je jedna kolumna.",
+    "type": "kod",
+    "required": true,
+    "from": "relacje DokumentFormalnyType"
+   },
+   "przestrzenNazw": {
+    "label": "przestrzeń nazw",
+    "description": "Przestrzeń nazw identyfikująca w sposób jednoznaczny źródło danych obiektu przestrzennego, o której mowa w § 6 ust. 1 pkt 1 rozporządzenia. Wartość atrybutu przestrzeń nazw powinna jednoznacznie identyfikować zbiór danych przestrzennych, do którego należy instancja typu obiektu.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "lokalnyId": {
+    "label": "identyfikator lokalny",
+    "description": "Identyfikator lokalny obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 2 rozporządzenia, przypisany przez dostawcę danych. Unikalność identyfikatora w przestrzeni nazw gwarantuje dostawca zbioru danych przestrzennych.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "tytul": {
+    "label": "tytuł",
+    "description": "Oficjalny tytuł lub nazwa dokumentu.",
+    "type": "string",
+    "required": true,
+    "from": "DokumentFormalnyType"
+   },
+   "nazwaSkrocona": {
+    "label": "nazwa skrócona",
+    "description": "Skrócona nazwa dokumentu.",
+    "type": "string",
+    "required": false,
+    "from": "DokumentFormalnyType"
+   },
+   "numerIdentyfikacyjny": {
+    "label": "numer identyfikacyjny",
+    "description": "Kod wykorzystywany do identyfikacji dokumentu.",
+    "type": "string",
+    "required": false,
+    "from": "DokumentFormalnyType"
+   },
+   "organUstanawiajacy": {
+    "label": "organ ustanawiający",
+    "description": "Organ ustanawiający (wydający) dokument formalny. Atrybut może przyjąć wartość będącą np. nazwą organu jednostki samorządu terytorialnego.",
+    "type": "string",
+    "required": false,
+    "from": "DokumentFormalnyType"
+   },
+   "data": {
+    "label": "data",
+    "description": "Data utworzenia, publikacji lub zmiany dokumentu.",
+    "type": "gmd:CI_Date_PropertyType",
+    "required": true,
+    "from": "DokumentFormalnyType"
+   },
+   "typDaty": {
+    "label": "typ daty",
+    "description": "typ daty w grupie CI_Date: creation (utworzenie), publication (publikacja), revision (zmiana)",
+    "type": "gmd:CI_Date_PropertyType",
+    "required": true,
+    "from": "DokumentFormalnyType"
+   },
+   "dataWejsciaWZycie": {
+    "label": "data wejścia w życie",
+    "description": "Data dzienna wejścia w życie dokumentu będącego aktem prawnym.",
+    "type": "date",
+    "required": false,
+    "from": "DokumentFormalnyType"
+   },
+   "dataUchylenia": {
+    "label": "data uchylenia",
+    "description": "Data dzienna, do której dokument obowiązywał.",
+    "type": "date",
+    "required": false,
+    "from": "DokumentFormalnyType"
+   },
+   "szczegoloweOdniesienie": {
+    "label": "szczegółowe odniesienie",
+    "description": "Odniesienie do konkretnej części dokumentu istotnej z punktu widzenia procesu planowania przestrzennego.",
+    "type": "string",
+    "required": false,
+    "from": "DokumentFormalnyType"
+   },
+   "dziennikUrzedowy": {
+    "label": "dziennik urzędowy",
+    "description": "Nazwa dziennika urzędowego, w którym opublikowano dokument formalny.",
+    "type": "gml:ReferenceType",
+    "required": false,
+    "from": "DokumentFormalnyType"
+   },
+   "lacze": {
+    "label": "łącze",
+    "description": "Łącze (adres URI), pod którym jest dostępny dokument formalny.",
+    "type": "anyURI",
+    "required": false,
+    "from": "DokumentFormalnyType"
+   }
+  },
+  "RysunekAktuPlanowaniaPrzestrzennego": {
+   "przestrzenNazw": {
+    "label": "przestrzeń nazw",
+    "description": "Przestrzeń nazw identyfikująca w sposób jednoznaczny źródło danych obiektu przestrzennego, o której mowa w § 6 ust. 1 pkt 1 rozporządzenia. Wartość atrybutu przestrzeń nazw powinna jednoznacznie identyfikować zbiór danych przestrzennych, do którego należy instancja typu obiektu.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "lokalnyId": {
+    "label": "identyfikator lokalny",
+    "description": "Identyfikator lokalny obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 2 rozporządzenia, przypisany przez dostawcę danych. Unikalność identyfikatora w przestrzeni nazw gwarantuje dostawca zbioru danych przestrzennych.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "wersjaId": {
+    "label": "identyfikator wersji",
+    "description": "Identyfikator poszczególnej wersji obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 3 rozporządzenia, przypisany przez dostawcę danych. W zestawie wszystkich wersji danego obiektu identyfikator wersji jest unikalny.",
+    "type": "string",
+    "required": false,
+    "from": "IdentyfikatorType"
+   },
+   "poczatekWersjiObiektu": {
+    "label": "początek wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została wprowadzona do zbioru danych przestrzennych lub zmieniona w tym zbiorze danych przestrzennych.",
+    "type": "dateTime",
+    "required": true,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "koniecWersjiObiektu": {
+    "label": "koniec wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została zastąpiona w zbiorze danych przestrzennych lub wycofana z tego zbioru danych przestrzennych.",
+    "type": "dateTime",
+    "required": false,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "tytul": {
+    "label": "tytuł",
+    "description": "Oficjalny tytuł (nazwa) graficznej części aktu planowania przestrzennego.",
+    "type": "string",
+    "required": true,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "lacze": {
+    "label": "łącze",
+    "description": "Łącze (adres URI), pod którym jest dostępna część graficzna aktu planowania przestrzennego w postaci cyfrowej reprezentacji z nadaną georeferencją w obowiązującym państwowym systemie odniesień przestrzennych reprezentowana przez obiekt przestrzenny, w postaci pliku GeoTIFF.",
+    "type": "anyURI",
+    "required": true,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "legenda": {
+    "label": "legenda",
+    "description": "Łącze (adres URI), pod którym jest dostępna legenda części graficznej aktu planowania przestrzennego reprezentowanej przez obiekt przestrzenny.",
+    "type": "anyURI",
+    "required": false,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "ukladOdniesieniaPrzestrzennego": {
+    "label": "układ odniesienia przestrzennego",
+    "description": "Układ odniesienia przestrzennego części graficznej aktu planowania przestrzennego reprezentowanej przez obiekt przestrzenny (georeferencja pliku). Układ odniesienia przestrzennego jest podany zgodnie z EPSG Geodetic Parameter Dataset.",
+    "type": "string",
+    "required": true,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "rozdzielczoscPrzestrzenna": {
+    "label": "rozdzielczość przestrzenna",
+    "description": "Informacja o rozdzielczości przestrzennej części graficznej aktu planowania przestrzennego reprezentowanej przez obiekt przestrzenny, odpowiadającej skali sporządzania danego aktu. Wielkość opisująca poziom szczegółowości części graficznej aktu planowania przestrzennego wyrażona za pomocą liczby całkowitej stanowiącej mianownik skali.",
+    "type": "integer",
+    "required": true,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "opis": {
+    "label": "opis",
+    "description": "Krótka charakterystyka części graficznej aktu planowania przestrzennego reprezentowanej przez obiekt przestrzenny.",
+    "type": "string",
+    "required": false,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "obowiazujeOd": {
+    "label": "obowiązuje od",
+    "description": "Data, od której dana wersja obiektu przestrzennego obowiązuje.",
+    "type": "date",
+    "required": true,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   },
+   "obowiazujeDo": {
+    "label": "obowiązuje do",
+    "description": "Data, do której dana wersja obiektu przestrzennego obowiązywała.",
+    "type": "date",
+    "required": false,
+    "from": "RysunekAktuPlanowaniaPrzestrzennegoType"
+   }
+  },
+  "StrefaPlanistyczna": {
+   "przestrzenNazw": {
+    "label": "przestrzeń nazw",
+    "description": "Przestrzeń nazw identyfikująca w sposób jednoznaczny źródło danych obiektu przestrzennego, o której mowa w § 6 ust. 1 pkt 1 rozporządzenia. Wartość atrybutu przestrzeń nazw powinna jednoznacznie identyfikować zbiór danych przestrzennych, do którego należy instancja typu obiektu.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "lokalnyId": {
+    "label": "identyfikator lokalny",
+    "description": "Identyfikator lokalny obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 2 rozporządzenia, przypisany przez dostawcę danych. Unikalność identyfikatora w przestrzeni nazw gwarantuje dostawca zbioru danych przestrzennych.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "wersjaId": {
+    "label": "identyfikator wersji",
+    "description": "Identyfikator poszczególnej wersji obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 3 rozporządzenia, przypisany przez dostawcę danych. W zestawie wszystkich wersji danego obiektu identyfikator wersji jest unikalny.",
+    "type": "string",
+    "required": false,
+    "from": "IdentyfikatorType"
+   },
+   "oznaczenie": {
+    "label": "oznaczenie",
+    "description": "Ciąg literowo-liczbowy, który określa wydzielenie planistyczne.",
+    "type": "string",
+    "required": true,
+    "from": "WydzieleniePlanistyczneType"
+   },
+   "symbol": {
+    "label": "symbol",
+    "description": "Ciąg literowy stosowany do określenia rodzaju wydzielenia planistycznego.",
+    "type": "string",
+    "required": true,
+    "from": "WydzieleniePlanistyczneType"
+   },
+   "poczatekWersjiObiektu": {
+    "label": "początek wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została wprowadzona do zbioru danych przestrzennych lub zmieniona w tym zbiorze danych przestrzennych.",
+    "type": "dateTime",
+    "required": true,
+    "from": "WydzieleniePlanistyczneType"
+   },
+   "koniecWersjiObiektu": {
+    "label": "koniec wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została zastąpiona w zbiorze danych przestrzennych lub wycofana z tego zbioru danych przestrzennych.",
+    "type": "dateTime",
+    "required": false,
+    "from": "WydzieleniePlanistyczneType"
+   },
+   "obowiazujeOd": {
+    "label": "obowiązuje od",
+    "description": "Data, od której dana wersja obiektu przestrzennego obowiązuje.",
+    "type": "date",
+    "required": true,
+    "from": "WydzieleniePlanistyczneType"
+   },
+   "obowiazujeDo": {
+    "label": "obowiązuje do",
+    "description": "Data, do której dana wersja obiektu przestrzennego obowiązywała.",
+    "type": "date",
+    "required": false,
+    "from": "WydzieleniePlanistyczneType"
+   },
+   "status": {
+    "label": "status",
+    "description": "Ogólne wskazanie etapu procesu planowania, na którym znajduje się wersja obiektu przestrzennego.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "WydzieleniePlanistyczneType"
+   },
+   "charakterUstalenia": {
+    "label": "charakter ustalenia",
+    "description": "Charakter prawny wydzielenia planistycznego.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "WydzieleniePlanistyczneType"
+   },
+   "nazwa": {
+    "label": "nazwa",
+    "description": "Nazwa rodzajów stref planistycznych, o której mowa w art. 13c ust. 2 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "StrefaPlanistycznaType"
+   },
+   "nazwaAlternatywna": {
+    "label": "nazwa alternatywna",
+    "description": "Nazwa alternatywna strefy planistycznej.",
+    "type": "string",
+    "required": false,
+    "from": "StrefaPlanistycznaType"
+   },
+   "profilPodstawowy": {
+    "label": "profil funkcjonalny podstawowy",
+    "description": "Profil podstawowy będący obligatoryjnym elementem profilu funkcjonalnego strefy planistycznej, o którym mowa w art. 13e ust. 2 pkt 1 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "StrefaPlanistycznaType"
+   },
+   "profilDodatkowy": {
+    "label": "profil funkcjonalny dodatkowy",
+    "description": "Profil dodatkowy będący fakultatywnym elementem profilu funkcjonalnego strefy planistycznej, o którym mowa w art. 13e ust. 2 pkt 1 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym.",
+    "type": "gml:ReferenceType",
+    "required": false,
+    "from": "StrefaPlanistycznaType"
+   },
+   "maksNadziemnaIntensywnoscZabudowy": {
+    "label": "maksymalna nadziemna intensywność zabudowy",
+    "description": "Maksymalna nadziemna intensywność zabudowy o której mowa w art. 13e ust. 2 pkt 2 oraz ust. 3 pkt 1 i 2 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym. Wartość atrybutu podaje się z dokładnością do pierwszego miejsca po przecinku.",
+    "type": "decimal",
+    "required": false,
+    "from": "StrefaPlanistycznaType"
+   },
+   "maksUdzialPowierzchniZabudowy": {
+    "label": "maksymalny udział powierzchni zabudowy",
+    "description": "Maksymalny udział powierzchni zabudowy, o którym mowa w art. 13e ust. 2 pkt 2 i ust. 3 pkt 1 i 2 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym. Wartość atrybutu jest wyrażona w % z dokładnością do pierwszego miejsca po przecinku.",
+    "type": "decimal",
+    "required": false,
+    "from": "StrefaPlanistycznaType"
+   },
+   "maksWysokoscZabudowy": {
+    "label": "maksymalna wysokość zabudowy",
+    "description": "Maksymalna wysokość zabudowy, o której mowa w art. 13e ust. 2 pkt 2 i ust. 3 pkt 1 i 2 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym. Wartość atrybutu podaje się z dokładnością do pierwszego miejsca po przecinku.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "StrefaPlanistycznaType"
+   },
+   "minUdzialPowierzchniBiologicznieCzynnej": {
+    "label": "minimalny udział powierzchni biologicznie czynnej",
+    "description": "Minimalny udział powierzchni biologicznie czynnej, o której mowa w art. 13e ust. 2 pkt 3 i ust. 3 pkt 2 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym. Wartość atrybutu wyrażona jest w % z dokładnością do pierwszego miejsca po przecinku.",
+    "type": "decimal",
+    "required": false,
+    "from": "StrefaPlanistycznaType"
+   }
+  },
+  "ObszarUzupelnieniaZabudowy": {
+   "przestrzenNazw": {
+    "label": "przestrzeń nazw",
+    "description": "Przestrzeń nazw identyfikująca w sposób jednoznaczny źródło danych obiektu przestrzennego, o której mowa w § 6 ust. 1 pkt 1 rozporządzenia. Wartość atrybutu przestrzeń nazw powinna jednoznacznie identyfikować zbiór danych przestrzennych, do którego należy instancja typu obiektu.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "lokalnyId": {
+    "label": "identyfikator lokalny",
+    "description": "Identyfikator lokalny obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 2 rozporządzenia, przypisany przez dostawcę danych. Unikalność identyfikatora w przestrzeni nazw gwarantuje dostawca zbioru danych przestrzennych.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "wersjaId": {
+    "label": "identyfikator wersji",
+    "description": "Identyfikator poszczególnej wersji obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 3 rozporządzenia, przypisany przez dostawcę danych. W zestawie wszystkich wersji danego obiektu identyfikator wersji jest unikalny.",
+    "type": "string",
+    "required": false,
+    "from": "IdentyfikatorType"
+   },
+   "nazwa": {
+    "label": "nazwa",
+    "description": "Nazwa regulacji.",
+    "type": "string",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "oznaczenie": {
+    "label": "oznaczenie",
+    "description": "Ciąg literowo-liczbowy, który określa regulację.",
+    "type": "string",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "symbol": {
+    "label": "symbol",
+    "description": "Ciąg literowy stosowany do określenia rodzaju regulacji.",
+    "type": "string",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "poczatekWersjiObiektu": {
+    "label": "początek wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została wprowadzona do zbioru danych przestrzennych lub zmieniona w tym zbiorze danych przestrzennych.",
+    "type": "dateTime",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "koniecWersjiObiektu": {
+    "label": "koniec wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została zastąpiona w zbiorze danych przestrzennych lub wycofana z tego zbioru danych przestrzennych..",
+    "type": "dateTime",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "obowiazujeOd": {
+    "label": "obowiązuje od",
+    "description": "Data, od której dana wersja obiektu przestrzennego obowiązuje.",
+    "type": "date",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "obowiazujeDo": {
+    "label": "obowiązuje do",
+    "description": "Data, do której dana wersja obiektu przestrzennego obowiązywała.",
+    "type": "date",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "status": {
+    "label": "status",
+    "description": "Ogólne wskazanie etapu procesu planowania, na którym znajduje się wersja obiektu przestrzennego.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "charakterUstalenia": {
+    "label": "charakter ustalenia",
+    "description": "Charakter prawny regulacji.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "RegulacjaType"
+   }
+  },
+  "ObszarZabudowySrodmiejskiej": {
+   "przestrzenNazw": {
+    "label": "przestrzeń nazw",
+    "description": "Przestrzeń nazw identyfikująca w sposób jednoznaczny źródło danych obiektu przestrzennego, o której mowa w § 6 ust. 1 pkt 1 rozporządzenia. Wartość atrybutu przestrzeń nazw powinna jednoznacznie identyfikować zbiór danych przestrzennych, do którego należy instancja typu obiektu.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "lokalnyId": {
+    "label": "identyfikator lokalny",
+    "description": "Identyfikator lokalny obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 2 rozporządzenia, przypisany przez dostawcę danych. Unikalność identyfikatora w przestrzeni nazw gwarantuje dostawca zbioru danych przestrzennych.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "wersjaId": {
+    "label": "identyfikator wersji",
+    "description": "Identyfikator poszczególnej wersji obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 3 rozporządzenia, przypisany przez dostawcę danych. W zestawie wszystkich wersji danego obiektu identyfikator wersji jest unikalny.",
+    "type": "string",
+    "required": false,
+    "from": "IdentyfikatorType"
+   },
+   "nazwa": {
+    "label": "nazwa",
+    "description": "Nazwa regulacji.",
+    "type": "string",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "oznaczenie": {
+    "label": "oznaczenie",
+    "description": "Ciąg literowo-liczbowy, który określa regulację.",
+    "type": "string",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "symbol": {
+    "label": "symbol",
+    "description": "Ciąg literowy stosowany do określenia rodzaju regulacji.",
+    "type": "string",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "poczatekWersjiObiektu": {
+    "label": "początek wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została wprowadzona do zbioru danych przestrzennych lub zmieniona w tym zbiorze danych przestrzennych.",
+    "type": "dateTime",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "koniecWersjiObiektu": {
+    "label": "koniec wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została zastąpiona w zbiorze danych przestrzennych lub wycofana z tego zbioru danych przestrzennych..",
+    "type": "dateTime",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "obowiazujeOd": {
+    "label": "obowiązuje od",
+    "description": "Data, od której dana wersja obiektu przestrzennego obowiązuje.",
+    "type": "date",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "obowiazujeDo": {
+    "label": "obowiązuje do",
+    "description": "Data, do której dana wersja obiektu przestrzennego obowiązywała.",
+    "type": "date",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "status": {
+    "label": "status",
+    "description": "Ogólne wskazanie etapu procesu planowania, na którym znajduje się wersja obiektu przestrzennego.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "charakterUstalenia": {
+    "label": "charakter ustalenia",
+    "description": "Charakter prawny regulacji.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "RegulacjaType"
+   }
+  },
+  "ObszarStandardowDostepnosciInfrastrukturySpolecznej": {
+   "przestrzenNazw": {
+    "label": "przestrzeń nazw",
+    "description": "Przestrzeń nazw identyfikująca w sposób jednoznaczny źródło danych obiektu przestrzennego, o której mowa w § 6 ust. 1 pkt 1 rozporządzenia. Wartość atrybutu przestrzeń nazw powinna jednoznacznie identyfikować zbiór danych przestrzennych, do którego należy instancja typu obiektu.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "lokalnyId": {
+    "label": "identyfikator lokalny",
+    "description": "Identyfikator lokalny obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 2 rozporządzenia, przypisany przez dostawcę danych. Unikalność identyfikatora w przestrzeni nazw gwarantuje dostawca zbioru danych przestrzennych.",
+    "type": "string",
+    "required": true,
+    "from": "IdentyfikatorType"
+   },
+   "wersjaId": {
+    "label": "identyfikator wersji",
+    "description": "Identyfikator poszczególnej wersji obiektu przestrzennego, o którym mowa w § 6 ust. 1 pkt 3 rozporządzenia, przypisany przez dostawcę danych. W zestawie wszystkich wersji danego obiektu identyfikator wersji jest unikalny.",
+    "type": "string",
+    "required": false,
+    "from": "IdentyfikatorType"
+   },
+   "nazwa": {
+    "label": "nazwa",
+    "description": "Nazwa regulacji.",
+    "type": "string",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "oznaczenie": {
+    "label": "oznaczenie",
+    "description": "Ciąg literowo-liczbowy, który określa regulację.",
+    "type": "string",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "symbol": {
+    "label": "symbol",
+    "description": "Ciąg literowy stosowany do określenia rodzaju regulacji.",
+    "type": "string",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "poczatekWersjiObiektu": {
+    "label": "początek wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została wprowadzona do zbioru danych przestrzennych lub zmieniona w tym zbiorze danych przestrzennych.",
+    "type": "dateTime",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "koniecWersjiObiektu": {
+    "label": "koniec wersji obiektu",
+    "description": "Data i godzina, w której wersja obiektu przestrzennego została zastąpiona w zbiorze danych przestrzennych lub wycofana z tego zbioru danych przestrzennych..",
+    "type": "dateTime",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "obowiazujeOd": {
+    "label": "obowiązuje od",
+    "description": "Data, od której dana wersja obiektu przestrzennego obowiązuje.",
+    "type": "date",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "obowiazujeDo": {
+    "label": "obowiązuje do",
+    "description": "Data, do której dana wersja obiektu przestrzennego obowiązywała.",
+    "type": "date",
+    "required": false,
+    "from": "RegulacjaType"
+   },
+   "status": {
+    "label": "status",
+    "description": "Ogólne wskazanie etapu procesu planowania, na którym znajduje się wersja obiektu przestrzennego.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "charakterUstalenia": {
+    "label": "charakter ustalenia",
+    "description": "Charakter prawny regulacji.",
+    "type": "gml:ReferenceType",
+    "required": true,
+    "from": "RegulacjaType"
+   },
+   "wylaczenieZabudowyZagrodowej": {
+    "label": "wyłączenie zabudowy zagrodowej",
+    "description": "Informacja o wyłączeniu terenów zabudowy zagrodowej o którym mowa w art. 13f ust. 7 pkt 5 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym.",
+    "type": "boolean",
+    "required": true,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoSzkolyPodstawowej": {
+    "label": "odległość do szkoły podstawowej",
+    "description": "Maksymalna odległość, o której mowa w art. 13f ust. 2 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym, od granicy działki ewidencyjnej do budynku szkoły podstawowej. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": true,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoObszarowZieleniPublicznej": {
+    "label": "odległość do obszarów zieleni publicznej",
+    "description": "Maksymalna odległość, o której mowa w art. 13f ust. 3 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym, od granicy działki ewidencyjnej do granicy obszarów zieleni publicznej, o których mowa w art. 13f ust. 3 pkt 1 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": true,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "powierzchniaLacznaObszarowZieleniPublicznej": {
+    "label": "powierzchnia łączna obszarów zieleni publicznej",
+    "description": "Łączna powierzchnia obszarów zieleni publicznej, o których mowa w art. 13f ust. 3 pkt 1 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym. Wartość atrybutu jest wyrażona liczbą dziesiętną.",
+    "type": "gml:AreaType",
+    "required": true,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoObszaruZieleniPublicznej": {
+    "label": "odległość do obszaru zieleni publicznej",
+    "description": "Maksymalna odległość, o której mowa w art. 13f ust. 3 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym, od granicy działki ewidencyjnej do granicy obszaru zieleni publicznej, o którym mowa w art. 13f ust. 3 pkt 2 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": true,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "powierzchniaObszaruZieleniPublicznej": {
+    "label": "powierzchnia obszaru zieleni publicznej",
+    "description": "Powierzchnia obszaru zieleni publicznej, o którym mowa w art. 13f ust. 3 pkt 2 ustawy z dnia 27 marca 2003 r. o planowaniu i zagospodarowaniu przestrzennym. Wartość atrybutu jest wyrażona liczbą dziesiętną.",
+    "type": "gml:AreaType",
+    "required": true,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoPrzedszkola": {
+    "label": "odległość do przedszkola",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do przedszkola. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoZlobka": {
+    "label": "odległość do żłobka",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do żłobka. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoAmbulatoriumPOZ": {
+    "label": "odległość do ambulatorium podstawowej opieki zdrowotnej",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do ambulatorium podstawowej opieki zdrowotnej. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoBiblioteki": {
+    "label": "odległość do biblioteki",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do biblioteki. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoDomuKultury": {
+    "label": "odległość do domu kultury",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do domu kultury. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoDomuPomocySpolecznej": {
+    "label": "odległość do domu pomocy społecznej",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do domu pomocy społecznej. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoUrzadzonegoTerenuSportu": {
+    "label": "odległość do urządzonego terenu sportu",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do urządzonego terenu sportu. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoPrzystanku": {
+    "label": "odległość do przystanku",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do przystanku publicznego transportu zbiorowego. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoPlacowkiPocztowej": {
+    "label": "odległość do placówki pocztowej",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do placówki pocztowej. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoApteki": {
+    "label": "odległość do apteki",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do apteki. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoPosterunkuPolicji": {
+    "label": "odległość do posterunku policji",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do posterunku policji. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   },
+   "odlegloscDoPosterunkuJednostkiOchronyPrzeciwpozarowej": {
+    "label": "odległość do jednostki ochrony przeciwpożarowej",
+    "description": "Maksymalna odległość liczona jako droga dojścia ogólnodostępną trasą dla pieszych od granicy działki ewidencyjnej do posterunku jednostki ochrony przeciwpożarowej. Wartość atrybutu jest wyrażona liczbą całkowitą.",
+    "type": "gml:LengthType",
+    "required": false,
+    "from": "ObszarStandardowDostepnosciInfrastrukturySpolecznejType"
+   }
+  }
+ }
+}

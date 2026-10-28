@@ -128,7 +128,8 @@ def _moment(value) -> Optional[str]:
 
 
 def _values(value) -> List[str]:
-    """Wartość wielokrotna: lista, JSON ``["…"]`` albo tekst rozdzielony przecinkami / spacjami."""
+    """Wartość wielokrotna: lista, JSON ``["…"]``, ``{a,b}`` z listy QGIS albo tekst rozdzielony
+    przecinkami / spacjami."""
     if _empty(value):
         return []
     if isinstance(value, (list, tuple)):
@@ -139,6 +140,9 @@ def _values(value) -> List[str]:
             return [str(v).strip() for v in json.loads(text) if str(v).strip()]
         except ValueError:
             pass
+    if text.startswith("{") and text.endswith("}"):
+        # Wybór wielokrotny z listy QGIS (ValueRelation): {a,b} albo {"a","b"}.
+        return [part.strip('"') for part in _SPLIT.split(text[1:-1]) if part.strip('"')]
     if text.startswith("(") and ":" in text:
         # StringList OGR zapisany jako „(2:a,b)”
         text = text.split(":", 1)[1].rstrip(")")

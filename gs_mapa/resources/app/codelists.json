@@ -149,6 +149,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
     ],
     "label": "strefa cmentarzy",
+    "min_pbc": 30,
     "symbol": "SC"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaGornictwa": {
@@ -171,6 +172,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD"
     ],
     "label": "strefa górnictwa",
+    "min_pbc": null,
     "symbol": "SG"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaGospodarcza": {
@@ -188,6 +190,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
     ],
     "label": "strefa gospodarcza",
+    "min_pbc": 20,
     "symbol": "SP"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaHandluWielkopowierzchniowego": {
@@ -207,6 +210,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
     ],
     "label": "strefa handlu wielkopowierzchniowego",
+    "min_pbc": 30,
     "symbol": "SH"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaInfrastrukturalna": {
@@ -224,6 +228,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD"
     ],
     "label": "strefa infrastrukturalna",
+    "min_pbc": 20,
     "symbol": "SI"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaKomunikacyjna": {
@@ -251,6 +256,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD"
     ],
     "label": "strefa komunikacyjna",
+    "min_pbc": null,
     "symbol": "SK"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaOtwarta": {
@@ -272,6 +278,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZN"
     ],
     "label": "strefa otwarta",
+    "min_pbc": null,
     "symbol": "SO"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaProdukcjiRolniczej": {
@@ -295,6 +302,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZD"
     ],
     "label": "strefa produkcji rolniczej",
+    "min_pbc": 30,
     "symbol": "SR"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaUslugowa": {
@@ -313,6 +321,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
     ],
     "label": "strefa usługowa",
+    "min_pbc": 30,
     "symbol": "SU"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaWielofunkcyjnaZZabudowaMieszkaniowaJednorodzinna": {
@@ -331,6 +340,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
     ],
     "label": "strefa wielofunkcyjna z zabudową mieszkaniową jednorodzinną",
+    "min_pbc": 30,
     "symbol": "SJ"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaWielofunkcyjnaZZabudowaMieszkaniowaWielorodzinna": {
@@ -350,6 +360,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
     ],
     "label": "strefa wielofunkcyjna z zabudową mieszkaniową  wielorodzinną",
+    "min_pbc": 30,
     "symbol": "SW"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaWielofunkcyjnaZZabudowaZagrodowa": {
@@ -372,6 +383,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
     ],
     "label": "strefa wielofunkcyjna z zabudową zagrodową",
+    "min_pbc": 30,
     "symbol": "SZ"
    },
    "https://www.gov.pl/static/zagospodarowanieprzestrzenne/codelist/RodzajStrefyPlanistycznejKod/strefaZieleniIRekreacji": {
@@ -396,6 +408,7 @@
      "https://www.gov.pl/static/zagospodarowanieprzestrzenne/ontology/KPT#KPT-MPZP-ZP"
     ],
     "label": "strefa zieleni i rekreacji",
+    "min_pbc": 50,
     "symbol": "SN"
    }
   }

@@ -625,6 +625,13 @@ def _zones(doc: AppDocument, codes: CodeLists, out: _Collector) -> None:
             if not ok:
                 out.add(rule, ERROR, f"minUdzialPowierzchniBiologicznieCzynnej={bio} poza zakresem (OCL ZONE-14).",
                         zone, "minUdzialPowierzchniBiologicznieCzynnej")
+            else:
+                # Minimum z rozporządzenia dla rodzaju strefy (SG, SO, SK — brak minimum).
+                minimum = entry.get("min_pbc")
+                if minimum is not None and bio < Decimal(minimum):
+                    out.add(rule, ERROR, f"minUdzialPowierzchniBiologicznieCzynnej={bio} poniżej minimum "
+                                         f"{minimum}% dla strefy {entry['symbol']} (rozp. MRiT, zał. 1).",
+                            zone, "minUdzialPowierzchniBiologicznieCzynnej")
         if not zone.geometry.get("geometria"):
             out.add(rule, ERROR, "Strefa nie ma geometrii.", zone, "geometria")
 

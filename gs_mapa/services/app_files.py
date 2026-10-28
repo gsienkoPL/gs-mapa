@@ -34,7 +34,7 @@ from qgis.core import (
 )
 
 from ..core.app_gml import ACT, APP_CLASSES, AppGmlError, declared_srs, scan_app_classes
-from .app_crs import assign_file_crs, gpkg_srs_ids
+from .app_crs import assign_file_crs, enforce_file_crs, gpkg_srs_ids
 from .app_geometry import gml_layer_uri
 from .app_style import apply_app_style
 
@@ -219,6 +219,9 @@ def add_app_layers(path: str, group_name: Optional[str] = None, project: Optiona
     # (GPKG zapisany z GML, w którym OGR nie rozpoznał ``srsName``), bierzemy układ
     # z deklaracji GML, z którego plik powstał.
     assign_file_crs(layers, declared_file_crs(origin))
+    # Warstwa, której OGR dał inny układ niż plik (np. układ projektu zamiast 2178),
+    # rysuje się w innym miejscu mapy bez żadnego komunikatu — układ pliku wygrywa.
+    enforce_file_crs(layers, path)
     layers.sort(key=lambda l: _ORDER.index(l.name()) if l.name() in _ORDER else len(_ORDER))
     group = project.layerTreeRoot().insertGroup(0, group_name or Path(path).name)
     for layer in layers:

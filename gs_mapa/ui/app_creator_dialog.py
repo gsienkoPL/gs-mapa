@@ -49,13 +49,17 @@ from qgis.core import Qgis, QgsApplication, QgsDistanceArea, QgsProject
 from qgis.gui import QgsFieldComboBox, QgsFileWidget, QgsMapLayerComboBox, QgsMapToolIdentifyFeature
 
 from ..core.act_index import ActIndexEntry
-from ..core.app_gml import ACT, OSDIS, OUZ, OZS, ZONE, AppGmlError
+from ..core import app_checklist
+from ..core.app_gml import ACT, DOCUMENT, DRAWING, OSDIS, OUZ, OZS, ZONE, AppGmlError
 from ..core.app_namespace import ACT_TYPE_KINDS, NamespaceCandidate, jpt_code, namespace_candidates, parse_namespace
 from ..core.app_rules import SUPPORTED_EPSG
 from ..core.app_update import (
     ActReferenceError, ActSource, act_from_values, document_from_values, drawing_from_values, parse_act_reference,
     read_act_source, resolve_act_id, update_draft, update_filename,
 )
+from ..core.app_defaults import document_defaults, effective_from, is_adopting
+from ..core.app_field_help import tooltip as field_tooltip
+from ..core.app_links import is_web
 from ..core.app_versioning import reconcile_drawings, reconcile_objects
 from ..core.app_writer import (
     CL, DATE_TYPES, DEFAULT_LEVEL, DOCUMENT_ROLES, LEVELS, NATURES, POG, ROLE_LABELS, STATUSES, Act, AppPlan,
@@ -80,6 +84,15 @@ TAB_ACT, TAB_DOCUMENTS, TAB_DRAWINGS, TAB_OBJECTS = range(4)
 #: Role kolorów poziomów uwag (``theme``).
 _COLORS = {"error": "err", "warning": "warn"}
 _SEVERITY = {"error": "błąd", "warning": "ostrzeżenie", "info": "informacja"}
+#: Naprawy, które kreator potrafi wykonać jednym kliknięciem (``PlanIssue.fix``) — opis dla przycisku.
+FIX_LABELS = {
+    "obsolete": "Ustaw status „nieaktualny” (obsolete)",
+    "effective-to": "Ustaw „obowiązuje do” — z daty uchylenia albo dziś",
+    "modification": "Ustaw modyfikacja=tak (akt obowiązuje w części obszaru)",
+    "change-count": "Podnieś liczbę zmian",
+    "drawing": "Dodaj rysunek aktu…",
+    "add-document": "Dodaj dokument uchwalający…",
+}
 
 
 def _tail(uri: str) -> str:
@@ -98,6 +111,21 @@ def _set_combo(combo: QComboBox, code) -> None:
     index = combo.findData(code)
     if index >= 0:
         combo.setCurrentIndex(index)
+
+
+def _field_tooltip(widget: QWidget, layer: str, field: str) -> None:
+    """
+    Dopisuje do podpowiedzi pola opis z urzędowego schematu APP 3.0.
+
+    :param widget: pole formularza (istniejąca podpowiedź zostaje na początku).
+    :param layer: klasa APP (``ACT``, ``DOCUMENT``…).
+    :param field: nazwa atrybutu APP (``core/app_layers.py``).
+    """
+    text = field_tooltip(layer, field)
+    if not text:
+        return
+    current = widget.toolTip()
+    widget.setToolTip(f"{current}\n\n{text}" if current else text)
 
 
 def _scroll(widget: QWidget) -> QScrollArea:
@@ -176,11 +204,18 @@ def _date_edit(value: Optional[str] = None) -> QDateEdit:
 class DocumentDialog(QDialog):
     """Formularz dokumentu formalnego (uchwała, rozstrzygnięcie, wyrok…)."""
 
-    def __init__(self, codes: dict, value: Optional[dict] = None, parent=None):
+    def __init__(self, codes: dict, value: Optional[dict] = None, parent=None,
+                 defaults: Optional[dict] = None):
         super().__init__(parent)
         # Własny wygląd wtyczki (makiety docs/ui), niezależny od stylu Qt w QGIS.
         theme.apply_plugin_style(self)
         self._attempted = False
+        #: Propozycje z jednostki (``core.app_defaults.document_defaults``): organ, dziennik, źródło.
+        self._defaults = defaults or {}
+        #: Data, którą „data wejścia w życie” powtarza za datą uchwały (``None`` = powiązanie zerwane).
+        self._auto_entry: Optional[str] = None
+        #: Ochrona przed potraktowaniem programowego wpisu daty jako decyzji użytkownika.
+        self._filling = False
         self.setWindowTitle(self.tr("Dokument formalny"))
         self.resize(560, 520)
         form = QFormLayout(self)
@@ -224,15 +259,85 @@ class DocumentDialog(QDialog):
         form.addRow(self.tr("Szczegółowe odniesienie:"), self.reference)
         form.addRow(self.tr("Dziennik urzędowy:"), self.journal)
         form.addRow(self.tr("Łącza:"), self.links)
+        # Skąd wzięły się wypełnione pola (pkt „pokazanie źródła”) — tylko gdy coś dopisano.
+        self.source_hint = QLabel("")
+        self.source_hint.setWordWrap(True)
+        theme.style_muted(self.source_hint)
+        self.source_hint.setVisible(False)
+        form.addRow("", self.source_hint)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
         self.local_id.textChanged.connect(self._mark)
         self.title.textChanged.connect(self._mark)
+        self.date.dateChanged.connect(self._follow_date)
+        self.role.currentIndexChanged.connect(self._follow_date)
+        self.entry.check.toggled.connect(self._break_follow)
+        self.entry.edit.dateChanged.connect(self._break_follow)
+        for widget, field in ((self.role, "rola"), (self.local_id, "lokalnyId"), (self.title, "tytul"),
+                              (self.short_name, "nazwaSkrocona"), (self.number, "numerIdentyfikacyjny"),
+                              (self.authority, "organUstanawiajacy"), (self.date, "data"),
+                              (self.date_type, "typDaty"), (self.entry, "dataWejsciaWZycie"),
+                              (self.repeal, "dataUchylenia"), (self.reference, "szczegoloweOdniesienie"),
+                              (self.journal, "dziennikUrzedowy"), (self.links, "lacze")):
+            _field_tooltip(widget, DOCUMENT, field)
         if value:
             self.set_value(value)
+        self._apply_defaults()
         self._mark()
+
+    def _apply_defaults(self) -> None:
+        """
+        Organ, dziennik i data wejścia w życie z jednostki oraz z daty uchwały.
+
+        Wypełniane są wyłącznie puste pola — wartości z pliku i wpisane przez użytkownika
+        zostają bez zmian. Podpis pod formularzem mówi, co przyszło z jednostki.
+        """
+        filled = []
+        proposed = self._defaults.get("authority")
+        if proposed and not self.authority.text().strip():
+            self.authority.setText(proposed)
+            filled.append(self.tr("organ ustanawiający"))
+        code = self._defaults.get("journal")
+        if code and not (self.journal.currentData() or ""):
+            _set_combo(self.journal, code)
+            if self.journal.currentData() == code:
+                filled.append(self.tr("dziennik urzędowy"))
+        notes = []
+        if filled:
+            notes.append(self.tr("Z jednostki ({0}): {1}.").format(
+                self._defaults.get("source") or self.tr("jednostka"), ", ".join(filled)))
+        self._follow_date()
+        if self._auto_entry and is_adopting({"role": self.role.currentData()}):
+            notes.append(self.tr("Data wejścia w życie z daty uchwały — możesz ją zmienić."))
+        self.source_hint.setText(" ".join(notes))
+        self.source_hint.setVisible(bool(notes))
+
+    def _follow_date(self, *args) -> None:
+        """„Data wejścia w życie” idzie za datą uchwały, dopóki użytkownik jej nie zmieni."""
+        if self._filling:
+            return
+        if not is_adopting({"role": self.role.currentData()}):
+            self._auto_entry = None
+            return
+        date = self.date.date().toString("yyyy-MM-dd")
+        current = self.entry.value()
+        if current and current != self._auto_entry:
+            # Własna data użytkownika — nie nadpisujemy.
+            self._auto_entry = None
+            return
+        self._filling = True
+        try:
+            self.entry.set_value(date)
+        finally:
+            self._filling = False
+        self._auto_entry = date
+
+    def _break_follow(self, *args) -> None:
+        """Ręczna zmiana (albo wyłączenie) daty wejścia w życie zrywa powiązanie z uchwałą."""
+        if not self._filling:
+            self._auto_entry = None
 
     def _mark(self, *args) -> None:
         # Ramka błędu dopiero po edycji pola albo próbie zapisu — nie przy otwarciu okna.
@@ -320,6 +425,12 @@ class DrawingDialog(QDialog):
         form.addRow(buttons)
         for widget in (self.local_id, self.title, self.link):
             widget.textChanged.connect(self._mark)
+        for widget, field in ((self.local_id, "lokalnyId"), (self.title, "tytul"), (self.link, "lacze"),
+                              (self.legend, "legenda"), (self.crs, "ukladOdniesieniaPrzestrzennego"),
+                              (self.scale, "rozdzielczoscPrzestrzenna"), (self.description, "opis"),
+                              (self.version_end, "koniecWersjiObiektu"), (self.effective_from, "obowiazujeOd"),
+                              (self.effective_to, "obowiazujeDo")):
+            _field_tooltip(widget, DRAWING, field)
         if value:
             self.set_value(value)
         self._mark()
@@ -480,7 +591,8 @@ class AppCreatorDialog(QDialog):
                  add_file: Optional[Callable[[str], None]] = None,
                  message: Optional[Callable[[str, str], None]] = None, codes: Optional[dict] = None,
                  eziudp_service=None, namespace_service=None, unit: Optional[Unit] = None,
-                 file_service=None, act_service=None, downloader=None, config=None):
+                 file_service=None, act_service=None, downloader=None, config=None,
+                 link_service=None):
         super().__init__(parent)
         # Własny wygląd wtyczki (makiety docs/ui), niezależny od stylu Qt w QGIS.
         theme.apply_plugin_style(self)
@@ -516,6 +628,14 @@ class AppCreatorDialog(QDialog):
         self._act_entries: List[ActIndexEntry] = []
         self._acts_url_template: Optional[str] = None
         self._update: Optional[dict] = None
+        #: Usługa sprawdzania łączy plików (``None`` = własna instancja przy pierwszym użyciu).
+        self._link_service = link_service
+        self._links_connected = False
+        #: Uwagi z „Sprawdź dane” i z kontroli łączy (łącza wracają później, więc osobno).
+        self._base_issues: List[PlanIssue] = []
+        self._link_issues: List[PlanIssue] = []
+        self._summary_plan: Optional[AppPlan] = None
+        self._summary_report = None
         #: Akt odczytany ze źródła przy wczytaniu do aktualizacji (wersje obiektów, geometria aktu).
         self._update_source: Optional[ActSource] = None
         self._update_pending: Optional[str] = None
@@ -527,6 +647,13 @@ class AppCreatorDialog(QDialog):
         self._resolver = CodeResolver(self.codes)
         self._documents: List[dict] = []
         self._drawings: List[dict] = []
+        #: Plik GeoPackage wczytany jako źródło danych („Wczytaj z pliku”) — tryb edycji w tabelach.
+        self._table_source: Optional[str] = None
+        self._table_mode = False
+        #: Pola zablokowane w trybie tabel: widget -> (enabled, read_only, edit_triggers).
+        self._table_locked: Dict[QWidget, tuple] = {}
+        #: Uwagi w kolejności listy komunikatów (dla naprawy zaznaczonej pozycji).
+        self._shown_issues: List[PlanIssue] = []
         self._result_path: Optional[str] = None
         self._pick_tool = None
         self._previous_tool = None
@@ -543,6 +670,8 @@ class AppCreatorDialog(QDialog):
             "z warstw projektu, atrybuty z formularza (listy kodowe jak w specyfikacji). Pola oznaczone * są "
             "wymagane; przed zapisem dane są sprawdzane, a wynik można od razu zwalidować (XSD, reguły APP, "
             "geometria)."))
+        self._intro_text = self.intro.text()
+        self._intro_tooltip = self.intro.toolTip()
         layout.addWidget(self.intro)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
@@ -552,6 +681,8 @@ class AppCreatorDialog(QDialog):
         self.tabs.addTab(self._build_list_tab("documents"), self.tr("Dokumenty"))
         self.tabs.addTab(self._build_list_tab("drawings"), self.tr("Rysunki"))
         self.tabs.addTab(_scroll(self._build_objects_tab()), self.tr("Strefy i regulacje"))
+        #: Tytuły zakładek bez liczników — liczniki braków dokłada ``_update_tab_titles``.
+        self._tab_titles = [self.tabs.tabText(index) for index in range(self.tabs.count())]
         splitter.addWidget(self.tabs)
         self.issues = QTreeWidget()
         self.issues.setColumnCount(3)
@@ -564,9 +695,25 @@ class AppCreatorDialog(QDialog):
         self.issues.setColumnWidth(1, 240)
         theme.align_headers(self.issues)
         self.issues.setToolTip(self.tr("Kliknij dwukrotnie, aby przejść do zakładki."))
+        self.issues.itemSelectionChanged.connect(self._refresh_fix_button)
+        # Panel komunikatów: lista uwag i naprawa wybranej jednym kliknięciem.
+        issues_panel = QWidget()
+        panel_layout = QVBoxLayout(issues_panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        fix_row = QHBoxLayout()
+        self.fix_hint = QLabel(self.tr("Zaznacz uwagę, aby ją poprawić jednym kliknięciem."))
+        self.fix_hint.setWordWrap(True)
+        theme.style_muted(self.fix_hint)
+        self.btn_fix = QPushButton(self.tr("Popraw"))
+        self.btn_fix.setEnabled(False)
+        fix_row.addWidget(self.fix_hint, 1)
+        fix_row.addWidget(self.btn_fix)
+        panel_layout.addLayout(fix_row)
+        panel_layout.addWidget(self.issues, 1)
         # Pusta lista komunikatów zajmowała miejsce bez informacji — pokazuje się z pierwszym wynikiem.
-        self.issues.setVisible(False)
-        splitter.addWidget(self.issues)
+        issues_panel.setVisible(False)
+        self._issues_panel = issues_panel
+        splitter.addWidget(issues_panel)
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter, 1)
@@ -609,6 +756,9 @@ class AppCreatorDialog(QDialog):
         self.btn_validate.clicked.connect(self.validate_result)
         self.btn_add.clicked.connect(self.add_result)
         self.btn_close.clicked.connect(self.close)
+        self.btn_fix.clicked.connect(self.fix_selected)
+        self.check_table_mode.toggled.connect(self.set_table_mode)
+        self.btn_reload.clicked.connect(self.refresh_from_file)
         self.issues.itemDoubleClicked.connect(self._on_issue_double_clicked)
         self.output.fileChanged.connect(self._refresh)
         self.new_version()
@@ -655,6 +805,42 @@ class AppCreatorDialog(QDialog):
         previous_row.addWidget(self.previous_output, 1)
         update_layout.addLayout(previous_row)
         layout.addWidget(update)
+
+        template = QGroupBox(self.tr("Wypełnij z pliku GeoPackage"))
+        #: Sekcja z odczytem/wczytywaniem pliku — jedyne pole aktywne w trybie edycji w tabelach.
+        self._template_box = template
+        template_layout = QVBoxLayout(template)
+        template_row = QHBoxLayout()
+        template_hint = QLabel(self.tr(
+            "Akt, dokumenty i rysunki z wypełnionego wzorcowego pliku GPKG — bez przepisywania. "
+            "Strefy i regulacje biorą się z warstw projektu."))
+        template_hint.setWordWrap(True)
+        theme.style_muted(template_hint)
+        self.btn_template = QPushButton(self.tr("Z pliku wzorcowego…"))
+        self.btn_template.setToolTip(self.tr(
+            "Wczytaj akt, dokumenty i rysunki z tabel APP w pliku GeoPackage; warstwy tego pliku, "
+            "jeśli są w projekcie, zostaną podpięte jako zasięg i źródła stref."))
+        template_row.addWidget(template_hint, 1)
+        template_row.addWidget(self.btn_template)
+        template_layout.addLayout(template_row)
+        table_row = QHBoxLayout()
+        self.check_table_mode = QCheckBox(self.tr("Edytuję w tabelach GeoPackage"))
+        self.check_table_mode.setToolTip(self.tr(
+            "Akt, dokumenty i rysunki są wtedy tylko do odczytu: zmieniasz je w tabelach QGIS, "
+            "a „Odśwież z pliku” czyta je ponownie. Strefy i regulacje i tak pochodzą z warstw."))
+        self.btn_reload = QPushButton(self.tr("Odśwież z pliku"))
+        self.btn_reload.setToolTip(self.tr("Przeczytaj ponownie akt, dokumenty i rysunki z pliku GeoPackage"))
+        self.btn_reload.setEnabled(False)
+        table_row.addWidget(self.check_table_mode, 1)
+        table_row.addWidget(self.btn_reload)
+        template_layout.addLayout(table_row)
+        self.template_info = QLabel("")
+        self.template_info.setWordWrap(True)
+        self.template_info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        theme.style_muted(self.template_info)
+        self.template_info.setVisible(False)
+        template_layout.addWidget(self.template_info)
+        layout.addWidget(template)
 
         ident = QGroupBox(self.tr("Identyfikator IIP"))
         form = QFormLayout(ident)
@@ -716,6 +902,8 @@ class AppCreatorDialog(QDialog):
         self.status = _combo(STATUSES.items())
         _set_combo(self.status, "legalForce")
         self.effective_from = _date_edit()
+        #: Data, którą „Obowiązuje od” przyjmuje z uchwały; inna wartość = data użytkownika.
+        self._auto_effective = self.effective_from.date().toString("yyyy-MM-dd")
         self.effective_to = OptionalDate(self.tr("podaj"))
         self.modification = _combo([(False, self.tr("nie — obowiązuje w całości")),
                                     (True, self.tr("tak — obowiązuje w części"))])
@@ -739,6 +927,12 @@ class AppCreatorDialog(QDialog):
         form.addRow(self.tr("Poziom w hierarchii *:"), self.level)
         form.addRow(self.tr("Status *:"), self.status)
         form.addRow(self.tr("Obowiązuje od *:"), self.effective_from)
+        # Skąd data, gdy przyszła z uchwały (pole zostaje edytowalne).
+        self.effective_hint = QLabel("")
+        self.effective_hint.setWordWrap(True)
+        theme.style_muted(self.effective_hint)
+        self.effective_hint.setVisible(False)
+        form.addRow("", self.effective_hint)
         form.addRow(self.tr("Obowiązuje do:"), self.effective_to)
         self._modification_label = QLabel(self.tr("Modyfikacja *:"))
         form.addRow(self._modification_label, self.modification)
@@ -805,12 +999,22 @@ class AppCreatorDialog(QDialog):
 
         for widget in (self.namespace, self.local_id, self.version_id, self.title):
             widget.textChanged.connect(self._refresh)
+        # Podpowiedzi z urzędowego schematu APP 3.0 (``core/app_field_help``).
+        for widget, field in ((self.namespace, "przestrzenNazw"), (self.local_id, "lokalnyId"),
+                              (self.version_id, "wersjaId"), (self.version_start, "poczatekWersjiObiektu"),
+                              (self.version_end, "koniecWersjiObiektu"), (self.title, "tytul"),
+                              (self.alt_titles, "tytulAlternatywny"), (self.plan_type, "typPlanu"),
+                              (self.level, "poziomHierarchii"), (self.status, "status"),
+                              (self.effective_from, "obowiazujeOd"), (self.effective_to, "obowiazujeDo"),
+                              (self.modification, "modyfikacja"), (self.change_count, "zmiana")):
+            _field_tooltip(widget, ACT, field)
         self.btn_now.clicked.connect(self.new_version)
         self.btn_namespace.clicked.connect(self.find_namespace)
         self.btn_update_load.clicked.connect(self._on_update_load_clicked)
         self.update_ref.returnPressed.connect(self._on_update_load_clicked)
         self.btn_update_find.clicked.connect(self.find_update_act)
         self.btn_update_file.clicked.connect(self._on_update_file_clicked)
+        self.btn_template.clicked.connect(self._on_template_clicked)
         self.plan_type.currentIndexChanged.connect(self._on_type_changed)
         self.change_check.toggled.connect(self.change_count.setEnabled)
         self.btn_map_add.clicked.connect(self._add_base_map)
@@ -877,6 +1081,17 @@ class AppCreatorDialog(QDialog):
             "Każdy obiekt warstwy staje się jednym obiektem APP; geometria musi być pojedynczym wielobokiem."))
         self.objects_hint.setWordWrap(True)
         layout.addWidget(self.objects_hint)
+        numbering = QHBoxLayout()
+        self.numbering_hint = QLabel(self.tr("Oznaczenia (np. 1SJ, 2SJ) muszą być unikalne w akcie."))
+        self.numbering_hint.setWordWrap(True)
+        theme.style_muted(self.numbering_hint)
+        self.btn_numbering = QPushButton(self.tr("Przenumeruj oznaczenia…"))
+        self.btn_numbering.setToolTip(self.tr(
+            "Znajdź w warstwach powtórzone i puste oznaczenia i zaproponuj nowe numery (zapis w warstwie)"))
+        self.btn_numbering.setEnabled(False)
+        numbering.addWidget(self.numbering_hint, 1)
+        numbering.addWidget(self.btn_numbering)
+        layout.addLayout(numbering)
         defaults = QGroupBox(self.tr("Wartości domyślne (gdy pole nie jest wskazane)"))
         form = QFormLayout(defaults)
         self.objects_status = _combo(STATUSES.items())
@@ -893,6 +1108,7 @@ class AppCreatorDialog(QDialog):
             self.sources[kind] = widget
             layout.addWidget(widget)
         layout.addStretch(1)
+        self.btn_numbering.clicked.connect(self._on_numbering_clicked)
         return page
 
     # --- reakcje formularza ------------------------------------------------------
@@ -1091,6 +1307,15 @@ class AppCreatorDialog(QDialog):
         self.btn_add.setToolTip(self.tr("Tabele aktu ze stylami wtyczki APP (GML zapisywany do GeoPackage)")
                                 if done and self._add_file is not None
                                 else self.tr("Najpierw wygeneruj plik GML („Generuj GML”)"))
+        # „Przenumeruj oznaczenia…” działa, gdy w zakładce obiektów jest warstwa z mapowaniem.
+        sources = getattr(self, "sources", {})
+        if hasattr(self, "btn_numbering"):
+            has_layers = any(widget.isChecked() and widget.layer() is not None for widget in sources.values())
+            self.btn_numbering.setEnabled(has_layers)
+            self.btn_numbering.setToolTip(
+                self.tr("Znajdź w warstwach powtórzone i puste oznaczenia i zaproponuj nowe numery "
+                        "(zapis w warstwie)") if has_layers
+                else self.tr("Najpierw wybierz warstwę stref albo regulacji"))
         self._refresh_list_buttons()
 
     def _add_base_map(self, *args, value: Optional[dict] = None) -> None:
@@ -1324,6 +1549,280 @@ class AppCreatorDialog(QDialog):
         if path:
             self.load_update_file(path)
 
+    # --- dane z pliku GeoPackage ---------------------------------------------------------
+
+    def _on_template_clicked(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, self.tr("Plik GeoPackage APP"), "",
+                                              self.tr("GeoPackage (*.gpkg)"))
+        if path:
+            self.load_template(path)
+
+    def _template_status(self, text: str, role: str = "") -> None:
+        self.template_info.setText(text)
+        theme.set_text_role(self.template_info, role)
+        self.template_info.setVisible(bool(text))
+
+    def load_template(self, path: str) -> bool:
+        """
+        Wypełnia formularz z pliku GeoPackage: akt, dokumenty, rysunki i warstwy pliku.
+
+        Strefy i regulacje nie są przepisywane z tabel — idą z warstw projektu, więc jeśli
+        tabele pliku są w projekcie, są podpinane jako zasięg i źródła obiektów.
+
+        :param path: plik ``.gpkg`` w układzie wzorcowego pliku wtyczki.
+        :return: ``True``, gdy wczytano przynajmniej jedną rzecz.
+        """
+        from ..services.app_source import read_template
+
+        try:
+            source = read_template(path)
+        except OSError as e:
+            self._template_status(self.tr("Nie wczytano {0}: {1}").format(Path(path).name, e), "err")
+            return False
+        if not source.act and not source.documents and not source.drawings:
+            text = self.tr("{0}: brak aktu, dokumentów i rysunków do wczytania.").format(Path(path).name)
+            self._template_status(text, "warn")
+            self._log(f"Kreator APP: {text}", "UWAGA")
+            return False
+        self._apply_template(source)
+        bound = self.bind_template_layers(path)
+        parts = []
+        if source.act:
+            parts.append(self.tr("akt {0}").format(source.act.get("local_id") or "?"))
+        if DOCUMENT in source.counts:
+            parts.append(self.tr("dokumentów: {0}").format(len(source.documents)))
+        if DRAWING in source.counts:
+            parts.append(self.tr("rysunków: {0}").format(len(source.drawings)))
+        if bound:
+            parts.append(self.tr("warstw podpiętych: {0}").format(bound))
+        text = self.tr("Z pliku {0}: {1}.").format(Path(path).name, ", ".join(parts))
+        if source.notes:
+            text += " " + "; ".join(source.notes) + "."
+        if not bound:
+            text += " " + self.tr("Strefy i regulacje: dodaj tabele pliku do projektu (przeciągnij plik do QGIS) "
+                                  "albo wskaż warstwy w zakładce „Strefy i regulacje”.")
+        self._template_status(text, "warn" if source.notes or not bound else "")
+        self._log(f"Kreator APP: wczytano z GeoPackage {path} — {', '.join(parts)}")
+        #: Plik źródłowy dla „Odśwież z pliku” (także po zwykłym „Z pliku wzorcowego…”).
+        self._table_source = str(Path(path))
+        self.btn_reload.setEnabled(True)
+        self.tabs.setCurrentIndex(TAB_ACT)
+        return True
+
+    def _apply_template(self, source) -> None:
+        """Wstawia akt, dokumenty i rysunki z pliku GeoPackage do formularza."""
+        act = source.act or {}
+        loading, self._loading = self._loading, True
+        try:
+            plan_type = act.get("plan_type") or self.plan_type.currentData()
+            if self.plan_type.findData(plan_type) < 0:
+                # Typ spoza jednostki kreatora: jednostka z przestrzeni nazw pliku (albo żadna).
+                self.set_unit(self._unit_for(act.get("namespace") or "", plan_type))
+            _set_combo(self.plan_type, plan_type)
+            self._on_type_changed()
+            if act:
+                self.namespace.setText(act.get("namespace") or "")
+                self.local_id.setText(act.get("local_id") or "")
+                self.version_id.setText(act.get("version_id") or "")
+                if act.get("version_start"):
+                    moment = QDateTime.fromString(str(act["version_start"]), Qt.DateFormat.ISODate)
+                    if moment.isValid():
+                        self.version_start.setDateTime(moment.toLocalTime())
+                self.version_end.set_value(act.get("version_end"))
+                self.title.setText(act.get("title") or "")
+                self.alt_titles.setText(act.get("alt_titles") or "")
+                _set_combo(self.level, act.get("level") or DEFAULT_LEVEL.get(plan_type, "local"))
+                _set_combo(self.status, act.get("status") or "legalForce")
+                if act.get("effective_from"):
+                    self.effective_from.setDate(QDate.fromString(str(act["effective_from"]), "yyyy-MM-dd"))
+                # Data z pliku jest wartością źródłową — uchwała jej nie nadpisze bez decyzji.
+                self._auto_effective = self.effective_from.date().toString("yyyy-MM-dd")
+                self._set_effective_hint("")
+                self.effective_to.set_value(act.get("effective_to"))
+                _set_combo(self.modification, bool(act.get("modification")))
+                count = act.get("change_count")
+                self.change_check.setChecked(count is not None)
+                self.change_count.setValue(int(count or 0))
+                self.changed_plan.setText(act.get("changed_plan") or "")
+                self.base_maps.setRowCount(0)
+                for value in act.get("base_maps") or []:
+                    self._add_base_map(value=value)
+            if DOCUMENT in source.counts:
+                self._documents = list(source.documents)
+                self._fill_documents()
+            if DRAWING in source.counts:
+                self._drawings = list(source.drawings)
+                self._fill_drawings()
+        finally:
+            self._loading = loading
+        self._refresh()
+
+    def bind_template_layers(self, path: str) -> int:
+        """
+        Zasięg aktu i źródła stref z warstw pliku GeoPackage obecnych w projekcie.
+
+        :return: liczba podpiętych warstw (0 — tabel pliku nie ma w projekcie).
+        """
+        target = str(Path(path))
+        layers = {}
+        for layer in QgsProject.instance().mapLayers().values():
+            source = str(layer.source() or "")
+            if source.split("|", 1)[0] == target:
+                layers[layer.name()] = layer
+        bound = 0
+        act_layer = layers.get(ACT)
+        if is_polygon_layer(act_layer):
+            self.extent_layer.setLayer(act_layer)
+            bound += 1
+        for kind, widget in self.sources.items():
+            layer = layers.get(kind)
+            if is_polygon_layer(layer):
+                widget.setChecked(True)
+                widget.layer_combo.setLayer(layer)
+                bound += 1
+        return bound
+
+    # --- tryb edycji w tabelach (GeoPackage jako źródło danych) -------------------------
+
+    def load_table_source(self, path: str) -> bool:
+        """
+        Wczytuje wypełniony wzorcowy GeoPackage jako źródło danych i przełącza okno w tryb
+        edycji w tabelach: akt, dokumenty i rysunki są tylko do odczytu (edycja w QGIS),
+        a „Generuj GML” działa bez zmian.
+
+        Warstwy pliku, których nie ma w projekcie, są dodawane — bez nich nie byłoby zasięgu
+        aktu ani stref.
+
+        :param path: plik ``.gpkg`` w układzie wzorcowego pliku wtyczki.
+        :return: ``True``, gdy plik dał się wczytać.
+        """
+        target = str(Path(path))
+        added = 0
+        if not self._layers_of(target):
+            from ..services.app_files import add_app_layers
+
+            added = len(add_app_layers(target, Path(target).name))
+        if not self.load_template(target):
+            return False
+        if added:
+            self._template_status(self.template_info.text() + " "
+                                  + self.tr("Dodano warstwy pliku do projektu: {0}.").format(added))
+        self.check_table_mode.setChecked(True)
+        self.set_table_mode(True)
+        # Wczytanie pliku przestawia część pól (typy, daty) — blokada musi wrócić na wszystkie.
+        self._lock_forms()
+        self.check_table_source()
+        self._refresh()
+        return True
+
+    def refresh_from_file(self) -> bool:
+        """
+        Czyta ponownie akt, dokumenty i rysunki z pliku wskazanego przy wczytaniu.
+
+        Warstwy projektu nie są ruszane (strefy żyją w tabelach QGIS), więc zmiany w pliku
+        widać dopiero po zapisaniu ich w QGIS.
+
+        :return: ``True``, gdy plik dał się odczytać.
+        """
+        if not self._table_source:
+            return False
+        if not self.load_template(self._table_source):
+            return False
+        if self._table_mode:
+            self._lock_forms()
+        self.check_table_source()
+        self._refresh()
+        return True
+
+    def set_table_mode(self, enabled: bool) -> None:
+        """Tryb „edytuję w tabelach”: dane z pliku tylko do odczytu, edycja w QGIS."""
+        enabled = bool(enabled)
+        if enabled == self._table_mode:
+            return
+        self._table_mode = enabled
+        self.check_table_mode.setChecked(enabled)
+        if enabled:
+            self._lock_forms()
+            self.intro.setText(self.tr(
+                "Tryb tabel: akt, dokumenty i rysunki czytane z pliku GeoPackage są tylko do odczytu. "
+                "Zmieniaj je w tabelach QGIS i kliknij „Odśwież z pliku”, potem „Generuj GML”."))
+        else:
+            self._unlock_forms()
+            self.intro.setText(self._intro_text)
+            self.intro.setToolTip(self._intro_tooltip)
+        self.btn_reload.setEnabled(bool(self._table_source))
+        self._refresh()
+
+    def check_table_source(self) -> List[PlanIssue]:
+        """
+        Braki danych z pliku bez odpytywania sieci: plan, ``check_plan``, liczniki zakładek
+        i podsumowanie pod listą uwag.
+
+        :return: uwagi (błędy blokują „Generuj GML”, ostrzeżenia nie).
+        """
+        try:
+            plan, issues = self.build_plan()
+        except (ValueError, KeyError, TypeError) as e:  # brak danych nie może wywalić okna
+            logger.exception("Kreator APP: nie zbudowano planu z pliku")
+            self._log(f"Kreator APP: nie zbudowano planu z pliku ({e})", "BŁĄD")
+            return []
+        issues = issues + check_plan(plan, self.codes)
+        self._base_issues, self._link_issues = issues, []
+        self._summary_plan, self._summary_report = plan, None
+        self._show_issues(issues)
+        self._show_summary(issues)
+        errors = sum(i.severity == "error" for i in issues)
+        self._log(f"Kreator APP: plik {Path(self._table_source or '').name} — błędów {errors}, "
+                  f"uwag {len(issues) - errors}")
+        return issues
+
+    def _lock_forms(self) -> None:
+        """
+        Blokuje pola zakładek *Akt*, *Dokumenty* i *Rysunki* poza sekcją „Wypełnij z pliku
+        GeoPackage” (tam zostaje „Z pliku wzorcowego…”, „Odśwież z pliku” i przełącznik).
+
+        Pola tekstowe stają się tylko do odczytu (zostają czytelne), listy kodowe i przyciski
+        są nieaktywne, a tabele przestają przyjmować edycję. Stan sprzed blokady jest
+        zapamiętywany, więc wyłączenie trybu przywraca formularz bez zmian.
+        """
+        for index in (TAB_ACT, TAB_DOCUMENTS, TAB_DRAWINGS):
+            page = self.tabs.widget(index)
+            page = page.widget() if isinstance(page, QScrollArea) else page
+            if page is None:
+                continue
+            for widget in page.findChildren(QWidget):
+                if widget is self._template_box or self._template_box.isAncestorOf(widget):
+                    continue
+                self._lock_widget(widget)
+
+    def _lock_widget(self, widget: QWidget) -> None:
+        if widget not in self._table_locked:
+            self._table_locked[widget] = (widget.isEnabled(),
+                                          widget.isReadOnly() if hasattr(widget, "isReadOnly") else None,
+                                          widget.editTriggers() if isinstance(widget, QAbstractItemView) else None)
+        if hasattr(widget, "setReadOnly"):
+            widget.setReadOnly(True)
+            return
+        if isinstance(widget, QAbstractItemView):
+            widget.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            return
+        if isinstance(widget, (QComboBox, QCheckBox, QPushButton, QDateEdit, QDateTimeEdit, QSpinBox,
+                               QPlainTextEdit, QgsFileWidget)):
+            widget.setEnabled(False)
+
+    def _unlock_forms(self) -> None:
+        """Przywraca stan pól sprzed trybu tabel (włącznie z polami nieaktywnymi z założenia)."""
+        for widget, (enabled, read_only, triggers) in self._table_locked.items():
+            try:
+                if read_only is not None:
+                    widget.setReadOnly(read_only)
+                if triggers is not None:
+                    widget.setEditTriggers(triggers)
+                widget.setEnabled(enabled)
+            except RuntimeError:
+                continue  # pole usunięte razem z oknem dokumentu/rysunku
+        self._table_locked.clear()
+
     def _unit_for(self, namespace: str, plan_type: Optional[str]) -> Optional[Unit]:
         """Jednostka z przestrzeni nazw, o ile dopuszcza typ aktu."""
         parts = parse_namespace(namespace)
@@ -1526,9 +2025,48 @@ class AppCreatorDialog(QDialog):
             for column, text in enumerate(cells):
                 table.setItem(row, column, QTableWidgetItem(text or ""))
 
+    def _document_defaults(self) -> dict:
+        """Propozycje pól dokumentu z jednostki: organ, dziennik urzędowy i podpis źródła."""
+        return document_defaults(self._unit, self.codes)
+
+    def _set_effective_hint(self, text: str, warning: bool = False) -> None:
+        """Podpis pod „Obowiązuje od”: skąd data i czy różni się od daty uchwały."""
+        self.effective_hint.setText(text)
+        theme.set_text_role(self.effective_hint, "warn" if warning else "muted")
+        self.effective_hint.setVisible(bool(text))
+
+    def _sync_effective_from(self) -> None:
+        """
+        „Obowiązuje od” z daty dokumentu uchwalającego (uchwały).
+
+        Data z uchwały zastępuje tylko wartość, która sama z wypełnienia pochodzi (albo domyślną
+        datę otwarcia okna). Datę wpisaną przez użytkownika zostawiamy — rozbieżność pokazujemy
+        pod polem jako uwagę, bo wybór należy do użytkownika.
+        """
+        if self._loading:
+            return
+        document = next((item for item in self._documents if is_adopting(item)), None)
+        date = effective_from(document) if document is not None else None
+        if document is None or not date:
+            self._set_effective_hint("")
+            return
+        label = str(document.get("number") or document.get("local_id") or self.tr("uchwała"))
+        current = self.effective_from.date().toString("yyyy-MM-dd")
+        if current == self._auto_effective:
+            self.effective_from.setDate(QDate.fromString(date, "yyyy-MM-dd"))
+            self._auto_effective = date
+            self._log(f"Kreator APP: obowiązuje od {date} — z uchwały {label}")
+        elif current != date:
+            self._set_effective_hint(
+                self.tr("Uchwała {0} podaje datę {1} — w polu jest {2} (zostawiono wpisaną wartość).")
+                .format(label, date, current), warning=True)
+            return
+        self._set_effective_hint(self.tr("Z uchwały {0}: obowiązuje od {1} — możesz zmienić.").format(label, date))
+
     def add_document(self, value: dict) -> None:
         self._documents.append(value)
         self._fill_documents()
+        self._sync_effective_from()
 
     def add_drawing(self, value: dict) -> None:
         self._drawings.append(value)
@@ -1540,9 +2078,16 @@ class AppCreatorDialog(QDialog):
                                            getattr(self, "_documents_remove", None), self.tr("dokument")),
                                           (getattr(self, "drawings_table", None), getattr(self, "_drawings_edit", None),
                                            getattr(self, "_drawings_remove", None), self.tr("rysunek"))):
-            if table is None or edit is None:
+            if table is None or edit is None or remove is None:
                 continue
             selected = table.currentRow() >= 0 and bool(table.selectedItems())
+            if self._table_mode:
+                # Tryb tabel: dokumenty i rysunki zmienia się w pliku, więc te przyciski są nieaktywne.
+                for button in (edit, remove):
+                    button.setEnabled(False)
+                    button.setToolTip(self.tr("Tryb tabel: zmień dane w pliku GeoPackage "
+                                              "i kliknij „Odśwież z pliku”"))
+                continue
             for button in (edit, remove):
                 button.setEnabled(selected)
                 button.setToolTip("" if selected else self.tr("Zaznacz {0} na liście").format(name))
@@ -1550,23 +2095,26 @@ class AppCreatorDialog(QDialog):
     def _add_document(self) -> None:
         default = {"role": "uchwala" if not self._documents else "dokument",
                    "local_id": f"D{len(self._documents) + 1}"}
-        dialog = DocumentDialog(self.codes, default, self)
+        dialog = DocumentDialog(self.codes, default, self, defaults=self._document_defaults())
         if dialog.exec():
             self.add_document(dialog.value())
 
     def _edit_document(self, *args) -> None:
         row = self.documents_table.currentRow()
         if 0 <= row < len(self._documents):
-            dialog = DocumentDialog(self.codes, self._documents[row], self)
+            dialog = DocumentDialog(self.codes, self._documents[row], self,
+                                    defaults=self._document_defaults())
             if dialog.exec():
                 self._documents[row] = dialog.value()
                 self._fill_documents()
+                self._sync_effective_from()
 
     def _remove_document(self) -> None:
         row = self.documents_table.currentRow()
         if 0 <= row < len(self._documents):
             del self._documents[row]
             self._fill_documents()
+            self._sync_effective_from()
 
     def _add_drawing(self) -> None:
         dialog = DrawingDialog({"local_id": f"R{len(self._drawings) + 1}"}, self)
@@ -1586,6 +2134,58 @@ class AppCreatorDialog(QDialog):
         if 0 <= row < len(self._drawings):
             del self._drawings[row]
             self._fill_drawings()
+
+    # --- numeracja oznaczeń ------------------------------------------------------------
+
+    def renumber_changes(self) -> list:
+        """
+        Propozycja nowych oznaczeń dla powtórzonych i pustych numerów w warstwach.
+
+        Czyta tylko warstwy włączone w zakładce „Strefy i regulacje”, w których mapa pól
+        wskazuje ``oznaczenie`` i ``symbol`` — bez tych kolumn numeracja jest wyprowadzana
+        przy zapisie i duplikaty nie powstają.
+        """
+        from ..core.app_numbering import plan_renumbering
+
+        records = []
+        for widget in self.sources.values():
+            if not widget.isChecked():
+                continue
+            layer = widget.layer()
+            if layer is None:
+                continue
+            mapping = widget.mapping()
+            designation, symbol = mapping.get("oznaczenie"), mapping.get("symbol")
+            names = set(layer.fields().names())
+            if not designation or not symbol or designation not in names or symbol not in names:
+                continue
+            for feature in layer.getFeatures():
+                records.append((layer.name(), feature.id(), feature[symbol], feature[designation]))
+        return plan_renumbering(records)
+
+    def apply_renumbering(self, changes) -> int:
+        """Zapisuje nowe oznaczenia w warstwach (okno podglądu otwiera ``_on_numbering_clicked``)."""
+        from ..services.app_numbering import apply_changes
+
+        layers = {widget.layer().name(): widget.layer() for widget in self.sources.values()
+                  if widget.isChecked() and widget.layer() is not None}
+        written = apply_changes(changes, layers, self.local_id.text().strip())
+        if written:
+            self.numbering_hint.setText(self.tr("Zapisano nowe oznaczenia: {0}.").format(written))
+            self._log(f"Kreator APP: przenumerowano oznaczenia — {written}")
+        self._refresh()
+        return written
+
+    def _on_numbering_clicked(self) -> None:
+        changes = self.renumber_changes()
+        if not changes:
+            self.numbering_hint.setText(self.tr("Brak powtórzonych ani pustych oznaczeń w warstwach."))
+            return
+        from .app_numbering_dialog import NumberingDialog
+
+        dialog = NumberingDialog(changes, self)
+        if dialog.exec():
+            self.apply_renumbering(changes)
 
     # --- model --------------------------------------------------------------------
 
@@ -1693,12 +2293,38 @@ class AppCreatorDialog(QDialog):
                    for line in report.renamed]
         return issues
 
+    def _geometry_issues(self, plan: AppPlan) -> List[PlanIssue]:
+        """
+        Kontrole geometrii planu przed zapisem: poprawność, wyjście poza akt, nakładanie, luki.
+
+        Ten sam zestaw co walidator pliku, ale na danych z formularza i warstw — dzięki temu
+        luki i nakładania wychodzą przy „Sprawdź dane”, a nie po zapisaniu pliku.
+        """
+        from ..services.app_geometry import check_plan_geometry
+
+        try:
+            result = check_plan_geometry(plan)
+        except Exception as e:  # noqa: BLE001 - brak kontroli geometrii nie może psuć sprawdzania danych
+            self._log(f"Kreator APP: kontroli geometrii nie wykonano ({e})", "UWAGA")
+            return []
+        issues: List[PlanIssue] = []
+        for finding in result.findings:
+            if finding.kind == ACT:
+                where = "Akt"
+            elif finding.kind:
+                where = f"{CLASS_LABELS.get(finding.kind, finding.kind)} {finding.object_id or ''}".strip()
+            else:
+                where = "Strefy"
+            issues.append(PlanIssue(finding.severity, where, finding.message))
+        return issues
+
     def check(self) -> List[PlanIssue]:
-        """Sprawdza dane formularza i pokazuje uwagi (bez zapisu)."""
+        """Sprawdza dane formularza, pokazuje uwagi i uruchamia kontrolę łączy w tle."""
         self._show_required = True
         self._refresh()
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         report = None
+        plan = None
         try:
             plan, issues = self.build_plan()
             issues = issues + check_plan(plan, self.codes)
@@ -1706,40 +2332,120 @@ class AppCreatorDialog(QDialog):
                 report = self._version_report(plan)
                 if report is not None:
                     issues = issues + self._version_issues(report)
+                # Geometria (luki, nakładania, wyjście poza akt) przed zapisem — nie po nim.
+                issues = issues + self._geometry_issues(plan)
         finally:
             QApplication.restoreOverrideCursor()
+        # Uwagi z łączy wracają później (sieć), więc trzymamy osobno i pokazujemy razem.
+        self._base_issues, self._link_issues = issues, []
+        self._summary_plan, self._summary_report = plan, report
         self._show_issues(issues)
+        self._show_summary(issues)
+        self._check_links()
+        return issues
+
+    def _show_summary(self, issues: List[PlanIssue]) -> None:
+        """Podsumowanie pod listą uwag: błędy i uwagi, braki w zakładkach, raport wersji."""
         errors = sum(i.severity == "error" for i in issues)
         notes = sum(i.severity == "warning" for i in issues)
         if errors:
+            # „Gdzie brakuje danych” jednym zdaniem — zamiast liczenia uwag po całej liście.
+            missing = app_checklist.summary(issues)
             theme.set_html(self.summary, theme.span(self.tr('Błędy: {0}').format(errors), "err", bold=True) + ", "
-                                 + self.tr("uwagi: {0} — popraw dane przed zapisem.").format(notes))
-        else:
-            counts = f"{len(plan.documents)} dok., {len(plan.drawings)} rys., {len(plan.objects)} stref/regulacji"
-            text = ("<b style='color:{c:ok}'>" + self.tr("Dane kompletne") + "</b> ("
-                    + counts + (self.tr(", uwagi: {0}").format(notes) if notes else "") + ").")
-            if report is not None:
-                text += " " + self.tr("Wersje obiektów: {0}.").format(report.summary())
-            theme.set_html(self.summary, text)
-        return issues
+                                 + self.tr("uwagi: {0} — popraw dane przed zapisem.").format(notes)
+                                 + ((" " + self.tr("Braki: {0}.").format(missing)) if missing else ""))
+            return
+        plan = self._summary_plan
+        counts = (f"{len(plan.documents)} dok., {len(plan.drawings)} rys., {len(plan.objects)} stref/regulacji"
+                  if plan is not None else "")
+        text = ("<b style='color:{c:ok}'>" + self.tr("Dane kompletne") + "</b> ("
+                + counts + (self.tr(", uwagi: {0}").format(notes) if notes else "") + ").")
+        if self._summary_report is not None:
+            text += " " + self.tr("Wersje obiektów: {0}.").format(self._summary_report.summary())
+        theme.set_html(self.summary, text)
+
+    def _links(self):
+        """Usługa sprawdzania łączy (tworzona i podłączana przy pierwszym użyciu)."""
+        if self._link_service is None:
+            from ..services.app_links import LinkChecker
+
+            self._link_service = LinkChecker(self)
+        if not self._links_connected:
+            self._link_service.checked.connect(self._on_links_checked)
+            self._links_connected = True
+        return self._link_service
+
+    def _link_items(self) -> List[tuple]:
+        """
+        Adresy do sprawdzenia: łącza dokumentów, rysunków i legendy (tylko ``http``/``https``).
+
+        :return: pary ``(adres, miejsce w formularzu)`` — miejsce trafia do listy uwag.
+        """
+        items = []
+        for index, document in enumerate(self._documents, start=1):
+            links = [url for url in document.get("links") or [] if is_web(url)]
+            for number, url in enumerate(links, start=1):
+                where = self.tr("Dokument {0}").format(index) if len(links) == 1 \
+                    else self.tr("Dokument {0} (łącze {1})").format(index, number)
+                items.append((url, where))
+        for index, drawing in enumerate(self._drawings, start=1):
+            if is_web(drawing.get("link")):
+                items.append((drawing["link"], self.tr("Rysunek {0}").format(index)))
+            if is_web(drawing.get("legend")):
+                items.append((drawing["legend"], self.tr("Rysunek {0} (legenda)").format(index)))
+        return items
+
+    def _check_links(self) -> None:
+        """Sprawdza łącza w tle — wynik jako uwagi, nigdy jako blokada zapisu."""
+        items = self._link_items()
+        if not items:
+            return
+        self._log(f"Kreator APP: sprawdzam łącza plików ({len(items)})")
+        self._links().check(items)
+
+    def _on_links_checked(self, results) -> None:
+        """Wynik kontroli łączy: uwagi pod listą danych i wpis w logu okna."""
+        self._link_issues = [PlanIssue("warning", result.where, result.message)
+                             for result in results if not result.ok]
+        for result in results:
+            self._log(f"Kreator APP: {result.where} — {result.message}", "INFO" if result.ok else "UWAGA")
+        issues = self._base_issues + self._link_issues
+        self._show_issues(issues)
+        self._show_summary(issues)
 
     def _show_issues(self, issues: List[PlanIssue]) -> None:
+        self._update_tab_titles(issues)
         self.issues.clear()
-        self.issues.setVisible(bool(issues))
+        ordered = sorted(issues, key=lambda i: i.severity != "error")
+        #: Uwagi w kolejności listy — z nich bierze się naprawa zaznaczonej pozycji.
+        self._shown_issues = ordered
+        self._issues_panel.setVisible(bool(issues))
+        self._refresh_fix_button()
         if issues:
             # Ukryty panel nie dostał wysokości przy pokazaniu — oddaj mu ok. 1/3 okna.
             sizes = self._splitter.sizes()
             if len(sizes) < 2 or sizes[1] < 80:
                 height = max(self.height(), 480)
                 self._splitter.setSizes([height - max(160, height // 3), max(160, height // 3)])
-        for issue in sorted(issues, key=lambda i: i.severity != "error"):
+        for issue in ordered:
             item = QTreeWidgetItem(self.issues)
             item.setText(0, _SEVERITY.get(issue.severity, issue.severity))
             theme.set_item_role(item, 0, _COLORS.get(issue.severity, _COLORS["warning"]))
             item.setText(1, issue.where)
             item.setToolTip(1, issue.where)
             item.setText(2, issue.message)
-            item.setToolTip(2, issue.message)
+            # „Skąd wziąć wartość”: podpowiedź do komunikatu, nie ozdobnik listy.
+            advice = app_checklist.hint(issue)
+            item.setToolTip(2, issue.message + ("\n\n" + advice if advice else ""))
+
+    def _update_tab_titles(self, issues: List[PlanIssue]) -> None:
+        """Liczniki braków w tytułach zakładek („Akt (2)”) i podpowiedź, co tam poprawić."""
+        found = app_checklist.counts(issues)
+        keys = (app_checklist.ACT, app_checklist.DOCUMENTS, app_checklist.DRAWINGS, app_checklist.OBJECTS)
+        for index, key in enumerate(keys):
+            errors, notes = found.get(key, (0, 0))
+            self.tabs.setTabText(index, app_checklist.tab_label(self._tab_titles[index], errors))
+            self.tabs.setTabToolTip(index, app_checklist.tab_tooltip(errors, notes))
 
     def _on_issue_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
         where = item.text(1)
@@ -1751,6 +2457,98 @@ class AppCreatorDialog(QDialog):
             self.tabs.setCurrentIndex(TAB_DRAWINGS)
         else:
             self.tabs.setCurrentIndex(TAB_OBJECTS)
+
+    # --- naprawa zaznaczonej uwagi ----------------------------------------------------
+
+    def _issue_of_selected(self) -> Optional[PlanIssue]:
+        """Uwaga zaznaczona na liście komunikatów (``None`` bez zaznaczenia)."""
+        item = self.issues.currentItem()
+        if item is None:
+            return None
+        index = self.issues.indexOfTopLevelItem(item)
+        if 0 <= index < len(self._shown_issues):
+            return self._shown_issues[index]
+        return None
+
+    def _refresh_fix_button(self, *args) -> None:
+        """„Popraw” aktywne tylko wtedy, gdy zaznaczona uwaga ma przygotowaną naprawę."""
+        issue = self._issue_of_selected()
+        fix = issue.fix if issue is not None else None
+        if self._table_mode:
+            # Naprawy zmieniają pola formularza — w trybie tabel formularz jest tylko do odczytu.
+            self.btn_fix.setEnabled(False)
+            self.btn_fix.setToolTip(self.tr("Tryb tabel: popraw dane w pliku GeoPackage"))
+            self.fix_hint.setText(self.tr("Tryb tabel: popraw dane w pliku GeoPackage i kliknij "
+                                          "„Odśwież z pliku”."))
+            return
+        self.btn_fix.setEnabled(bool(fix))
+        if fix:
+            label = FIX_LABELS.get(fix) or self.tr("Popraw dane aktu")
+            self.btn_fix.setToolTip(label)
+            self.fix_hint.setText(label + ".")
+        else:
+            self.btn_fix.setToolTip(self.tr("Zaznacz uwagę na liście"))
+            self.fix_hint.setText(self.tr("Zaznacz uwagę, aby ją poprawić jednym kliknięciem."))
+
+    def fix_selected(self) -> bool:
+        """
+        Wykonuje naprawę zaznaczonej uwagi i sprawdza dane ponownie.
+
+        Naprawy są deterministyczne (status, data, modyfikacja, liczba zmian) albo otwierają
+        formularz brakującego obiektu (dokument, rysunek) — nigdy nie zgadują ustaleń planu.
+
+        :return: ``True``, gdy naprawa została wykonana.
+        """
+        issue = self._issue_of_selected()
+        code = issue.fix if issue is not None else None
+        handler = {
+            "obsolete": self._fix_obsolete,
+            "effective-to": self._fix_effective_to,
+            "modification": self._fix_modification,
+            "change-count": self._fix_change_count,
+            "drawing": self._fix_drawing,
+            "add-document": self._fix_add_document,
+        }.get(code) if code else None
+        if issue is None or handler is None:
+            return False
+        self._log(f"Kreator APP: poprawa uwagi „{issue.message}”")
+        handler()
+        self._refresh()
+        self.check()
+        return True
+
+    def _fix_obsolete(self) -> None:
+        """Dokument uchylający: status aktu musi być „nieaktualny”."""
+        _set_combo(self.status, "obsolete")
+        self._log("Kreator APP: status aktu → nieaktualny (obsolete)")
+
+    def _fix_effective_to(self) -> None:
+        """Dokument uchylający: „obowiązuje do” z daty uchylenia w dokumencie (albo dziś)."""
+        repeal = next((value.get("repeal_date") for value in self._documents
+                       if value.get("role") == "uchyla" and value.get("repeal_date")), None)
+        self.effective_to.set_value(repeal or QDate.currentDate().toString("yyyy-MM-dd"))
+        self._log(f"Kreator APP: obowiązuje do → {self.effective_to.value()}")
+
+    def _fix_modification(self) -> None:
+        """Dokument unieważniający w planie ogólnym: akt obowiązuje w części obszaru."""
+        _set_combo(self.modification, True)
+        self._log("Kreator APP: modyfikacja → tak (akt obowiązuje w części obszaru)")
+
+    def _fix_change_count(self) -> None:
+        """Dokument unieważniający w innych aktach: podniesiona liczba zmian."""
+        self.change_check.setChecked(True)
+        self.change_count.setValue(max(1, self.change_count.value()))
+        self._log(f"Kreator APP: liczba zmian → {self.change_count.value()}")
+
+    def _fix_drawing(self) -> None:
+        """Brak rysunku w obowiązującym akcie: otwórz formularz rysunku."""
+        self.tabs.setCurrentIndex(TAB_DRAWINGS)
+        self._add_drawing()
+
+    def _fix_add_document(self) -> None:
+        """Brak dokumentu uchwalającego: otwórz formularz dokumentu."""
+        self.tabs.setCurrentIndex(TAB_DOCUMENTS)
+        self._add_document()
 
     def _source_for_update(self) -> Optional[ActSource]:
         """Akt źródłowy aktualizacji (przy wczytanym szkicu doczytywany z pliku — bez QGIS)."""
@@ -1826,13 +2624,16 @@ class AppCreatorDialog(QDialog):
                     previous = None
             if any(i.severity == "error" for i in issues):
                 raise AppWriteError(issues + check_plan(plan, self.codes))
+            geometry = self._geometry_issues(plan)
             result = write_app30(plan, path, codes=self.codes)
         except AppWriteError as e:
             QApplication.restoreOverrideCursor()
             self._show_issues(e.issues)
             errors = sum(i.severity == "error" for i in e.issues)
+            missing = app_checklist.summary(e.issues)
             theme.set_html(self.summary, "<b style='color:{c:err}'>" + self.tr("Nie zapisano — błędów: {0}.").format(errors)
-                                 + "</b> " + self.tr("Popraw dane (lista poniżej, dwuklik przenosi do zakładki)."))
+                                 + "</b> " + self.tr("Popraw dane (lista poniżej, dwuklik przenosi do zakładki).")
+                                 + ((" " + self.tr("Braki: {0}.").format(missing)) if missing else ""))
             self._log(f"Kreator APP: nie zapisano {path} — błędów {errors}", "UWAGA")
             return None
         except OSError as e:
@@ -1842,7 +2643,7 @@ class AppCreatorDialog(QDialog):
             return None
         QApplication.restoreOverrideCursor()
         self._result_path = result.path
-        shown = issues + result.issues
+        shown = issues + result.issues + geometry
         if report is not None:
             shown = shown + self._version_issues(report)
         self._show_issues(shown)
@@ -1947,6 +2748,9 @@ class AppCreatorDialog(QDialog):
         _set_combo(self.status, act.get("status", "legalForce"))
         if act.get("effective_from"):
             self.effective_from.setDate(QDate.fromString(act["effective_from"], "yyyy-MM-dd"))
+        # Data z pliku lub szkicu jest wartością źródłową — uchwała jej nie nadpisze bez decyzji.
+        self._auto_effective = self.effective_from.date().toString("yyyy-MM-dd")
+        self._set_effective_hint("")
         self.effective_to.set_value(act.get("effective_to"))
         _set_combo(self.modification, bool(act.get("modification")))
         self.change_check.setChecked(act.get("change_count") is not None)
@@ -2014,4 +2818,8 @@ class AppCreatorDialog(QDialog):
             if cancel is not None:
                 cancel()
             self._ns_pending = None
+        cancel_links = getattr(self._link_service, "cancel", None)
+        if cancel_links is not None:
+            # Odpowiedź HTTP po zamknięciu okna nie ma dokąd trafić.
+            cancel_links()
         super().closeEvent(event)

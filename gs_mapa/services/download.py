@@ -44,7 +44,8 @@ class FileDownloader(QObject):
         self._timeout_ms = timeout_ms
         self._max_size = max_size
 
-    def download(self, url: str, target_dir: str, expected_size: int | None = None) -> None:
+    def download(self, url: str, target_dir: str, expected_size: int | None = None,
+                 force: bool = False) -> None:
         """
         Rozpoczyna pobieranie ``url`` do katalogu ``target_dir`` (tworzonego w razie potrzeby).
 
@@ -54,13 +55,15 @@ class FileDownloader(QObject):
         :param url: adres pliku.
         :param target_dir: katalog docelowy.
         :param expected_size: rozmiar pliku w bajtach z katalogu dokumentów, jeśli znany.
+        :param force: pobierz ponownie, nawet gdy plik już istnieje — treść na adresem
+                      mogła się zmienić (akt z Rejestru doczekał się nowej wersji).
         """
         try:
             target = Path(target_dir) / file_name_from_url(url)
         except ValueError as e:
             self.failed.emit(url, str(e))
             return
-        if target.exists() and (expected_size is None or target.stat().st_size == expected_size):
+        if not force and target.exists() and (expected_size is None or target.stat().st_size == expected_size):
             self.finished.emit(url, str(target))
             return
 

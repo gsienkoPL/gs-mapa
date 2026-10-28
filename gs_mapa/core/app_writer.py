@@ -260,6 +260,8 @@ class PlanIssue:
     severity: str  # "error" | "warning"
     where: str
     message: str
+    #: Kod naprawy, którą kreator potrafi wykonać jednym kliknięciem (``None`` — brak).
+    fix: Optional[str] = None
 
     def __str__(self) -> str:
         return f"{self.where}: {self.message}" if self.where else self.message
@@ -308,8 +310,8 @@ def check_plan(plan: AppPlan, codes: Optional[dict] = None) -> List[PlanIssue]:
     codes = codes or load_codes()
     issues: List[PlanIssue] = []
 
-    def error(where, message):
-        issues.append(PlanIssue("error", where, message))
+    def error(where, message, fix=None):
+        issues.append(PlanIssue("error", where, message, fix))
 
     def warning(where, message):
         issues.append(PlanIssue("warning", where, message))
@@ -405,7 +407,8 @@ def check_plan(plan: AppPlan, codes: Optional[dict] = None) -> List[PlanIssue]:
 
     if not any(d.role == "uchwala" for d in plan.documents) and not any(
             d.role == "przystapienie" for d in plan.documents):
-        error("Dokumenty", "akt musi wskazywać dokument przystępujący albo uchwalający (OCL ACT-01)")
+        error("Dokumenty", "akt musi wskazywać dokument przystępujący albo uchwalający (OCL ACT-01)",
+              "add-document")
     if sum(d.role == "uchwala" for d in plan.documents) > 1:
         error("Dokumenty", "akt może mieć tylko jeden dokument uchwalający")
     if act.status in ("legalForce", "obsolete") and sum(d.role == "uchwala" for d in plan.documents) != 1:
@@ -432,16 +435,16 @@ def check_plan(plan: AppPlan, codes: Optional[dict] = None) -> List[PlanIssue]:
     uniewazniajacy = any(d.role == "uniewaznia" for d in plan.documents)
     if uchylajacy:
         if act.status != "obsolete":
-            error("Dokumenty", "akt z dokumentem uchylającym musi mieć status obsolete")
+            error("Dokumenty", "akt z dokumentem uchylającym musi mieć status obsolete", "obsolete")
         if not act.effective_to:
-            error("Dokumenty", "akt z dokumentem uchylającym musi mieć obowiazujeDo")
+            error("Dokumenty", "akt z dokumentem uchylającym musi mieć obowiazujeDo", "effective-to")
     if uniewazniajacy:
         if pog and act.modification is not True:
             error("Dokumenty", "plan ogólny z dokumentem unieważniającym musi mieć modyfikacja=true "
-                               "(obowiązuje w części obszaru)")
+                               "(obowiązuje w części obszaru)", "modification")
         if not pog and act.change_count is None and act.status != "obsolete":
             error("Dokumenty", "akt z dokumentem unieważniającym musi mieć podniesioną liczbę zmian "
-                               "(zmiana) albo status obsolete")
+                               "(zmiana) albo status obsolete", "change-count")
     uchwala = next((d for d in plan.documents if d.role == "uchwala"), None)
     if act.status == "legalForce" and uchwala is not None and uchwala.entry_into_force \
             and act.effective_from < uchwala.entry_into_force:
@@ -471,7 +474,7 @@ def check_plan(plan: AppPlan, codes: Optional[dict] = None) -> List[PlanIssue]:
         date(where, "obowiazujeOd", drawing.effective_from)
         date(where, "obowiazujeDo", drawing.effective_to, required=False)
     if act.status == "legalForce" and not plan.drawings and not plan.objects:
-        error("Rysunki", "obowiązujący akt bez stref i regulacji musi mieć rysunek (OCL ACT-07)")
+        error("Rysunki", "obowiązujący akt bez stref i regulacji musi mieć rysunek (OCL ACT-07)", "drawing")
 
     zones = codes["zones"]["values"]
     seen: Dict[Tuple[str, str], str] = {}

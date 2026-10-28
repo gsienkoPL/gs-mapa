@@ -276,6 +276,8 @@ class ActSearchPanel(QWidget):
     remove_layers_requested = pyqtSignal(object)
     #: Nowa wersja aktu w kreatorze GML APP 3.0.
     new_version_requested = pyqtSignal(object)
+    #: Walidacja pliku GML aktu pobranego z GS Mapa (okno walidacji).
+    validate_requested = pyqtSignal(object)
     #: Zmieniły się filtry typu/statusu (do zapamiętania w ustawieniach).
     filters_changed = pyqtSignal()
     #: Zmieniło się zaznaczenie (akt albo ``None``) — „Nowa wersja aktu z Rejestru…” na karcie Pliki APP.
@@ -599,6 +601,9 @@ class ActSearchPanel(QWidget):
             layers.triggered.connect(lambda: self.add_layers_requested.emit(entry))
         version = menu.addAction(theme.icon("wand"), self.tr("Nowa wersja w kreatorze…"))
         version.triggered.connect(lambda: self.new_version_requested.emit(entry))
+        validate = menu.addAction(theme.icon("validate", "WindowText"), self.tr("Waliduj"))
+        validate.setToolTip(self.tr("Pobiera plik GML aktu z GS Mapa i sprawdza: schemat XSD, reguły APP, geometria"))
+        validate.triggered.connect(lambda: self.validate_requested.emit(entry))
         menu.addSeparator()
         copy = menu.addAction(theme.icon("copy"), self.tr("Kopiuj identyfikator aktu"))
         copy.setToolTip(entry.act_id)

@@ -49,6 +49,7 @@ from .app_tab import AppTab
 from .national_layers import NationalLayersPanel
 from .plan_info import (
     ActHit, PlanInfoDialog, act_layers, acts_on_map, add_vector_layers, is_bucket_url, remove_act_layers,
+    resolve_local_hits,
 )
 from .search_panel import ActSearchPanel
 from .unit_context import ContextBar, UnitContext
@@ -114,6 +115,8 @@ class GSMapaDock(QgsDockWidget):
         self._last_message = ""
         #: Akty, dla których „Dodaj warstwy planu” czeka na plik ``akty/{act_id}.json``.
         self._pending_act_layers: set = set()
+        #: Wpisy indeksu aktów — dopasowanie aktów z plików dodanych do mapy (typ + TERYT).
+        self._act_entries: list = []
 
         self._current_manifest: ManifestModel | None = None
         self._plan_info_dialog: PlanInfoDialog | None = None
@@ -260,6 +263,7 @@ class GSMapaDock(QgsDockWidget):
         self._search_panel.add_layers_requested.connect(self.add_act_layers)
         self._search_panel.remove_layers_requested.connect(self.remove_act_layers)
         self._search_panel.new_version_requested.connect(self._app_tab.update_act)
+        self._search_panel.validate_requested.connect(self._on_search_validate)
         self._search_panel.selection_changed.connect(self._app_tab.set_selected_act)
         self._search_panel.choose_unit_requested.connect(self._context_bar.choose)
         # Ctrl/⌘+F — pole szukania aktów (karta Plany).
@@ -516,11 +520,14 @@ class GSMapaDock(QgsDockWidget):
 
     def _on_acts_found(self, hits: list) -> None:
         """Pokazuje akty z klikniętego miejsca i pobiera ich dokumenty."""
-        self.log(f"Informacja o planie: {', '.join(h.act_id for h in hits) or 'brak planu w tym miejscu'}")
+        self.log(f"Informacja o planie: {', '.join(h.act_id or f'{h.typ} z pliku' for h in hits) or 'brak planu w tym miejscu'}")
         self._show_acts(hits)
 
     def _show_acts(self, hits: list) -> None:
         """Otwiera okno „Informacja o planie” z aktami i pobiera ich pliki JSON."""
+        # Akty z plików APP (GPKG, GML) nie mają identyfikatora z Rejestru — dopasowujemy je
+        # do indeksu po typie i TERYT, żeby okno pokazało dokumenty i link do Rejestru.
+        hits = resolve_local_hits(list(hits), self._act_entries)
         if self._plan_info_dialog is None:
             self._plan_info_dialog = PlanInfoDialog(self._iface, self, config=self._config)
         self._plan_info_dialog.show_acts(hits)
@@ -529,7 +536,8 @@ class GSMapaDock(QgsDockWidget):
 
         template = self._current_manifest.acts_url_template if self._current_manifest else None
         for hit in hits:
-            self._act_service.fetch(hit.act_id, template)
+            if hit.act_id:
+                self._act_service.fetch(hit.act_id, template)
 
     def _on_act_details_ready(self, act_id: str, details) -> None:
         if self._plan_info_dialog is not None:
@@ -589,6 +597,7 @@ class GSMapaDock(QgsDockWidget):
 
     def _on_act_index_ready(self, entries: list) -> None:
         self.log(f"Indeks aktów: {len(entries)} aktów")
+        self._act_entries = list(entries)
         self._search_panel.set_entries(entries)
         self._app_tab.set_act_index(entries)
         self._update_index_state()
@@ -607,6 +616,11 @@ class GSMapaDock(QgsDockWidget):
         """Okno „Informacja o planie” dla aktu z wyników wyszukiwania."""
         self.log(f"Wyszukiwanie: szczegóły aktu {entry.act_id}")
         self._show_acts([ActHit(act_id=entry.act_id, typ=entry.typ, teryt=entry.terc)])
+
+    def _on_search_validate(self, entry: ActIndexEntry) -> None:
+        """„Waliduj” z menu aktu — plik GML Rejestru do okna walidacji APP."""
+        self.log(f"Wyszukiwanie: walidacja aktu {entry.act_id}")
+        self._app_tab.validate_act(entry)
 
     def _on_search_show_on_map(self, entry: ActIndexEntry) -> None:
         """Przybliża mapę do aktu z wyników; dokłada warstwy jego typu, jeśli ich nie ma."""

@@ -36,6 +36,7 @@ from ..core.app_rules import ERROR, WARNING
 from ..core.units import Unit
 from ..services.app_convert import AppConvertService
 from ..services.app_files import AppFileService
+from ..services.app_template_check import TemplateCheck
 from ..services.app_validation import AppValidationService
 from . import theme
 from .app_convert_dialog import AppConvertDialog
@@ -129,7 +130,8 @@ class AppTab(QWidget):
     def __init__(self, config=None, parent=None, canvas=None,
                  file_service: Optional[AppFileService] = None,
                  validation_service: Optional[AppValidationService] = None,
-                 convert_service: Optional[AppConvertService] = None, namespace_service=None):
+                 convert_service: Optional[AppConvertService] = None, namespace_service=None,
+                 act_service=None, downloader=None):
         super().__init__(parent)
         self._config = config
         self._canvas = canvas
@@ -138,8 +140,16 @@ class AppTab(QWidget):
         self._convert = convert_service or AppConvertService(self)
         #: Osobna usługa walidacji dla plików upuszczonych (nie koliduje z oknem walidacji).
         self._background_validation = AppValidationService(self)
+        #: Braki danych w tabelach wzoru po zapisaniu zmian (pasek komunikatów).
+        self._template_check = TemplateCheck(parent=self)
         #: Usługa EZiUDP kreatora (dobór przestrzeni nazw); ``None`` = własna instancja kreatora.
         self._namespace_service = namespace_service
+        #: Usługi pobierania aktu z Rejestru do walidacji (``None`` = własne przy pierwszym użyciu).
+        self._act_service = act_service
+        self._downloader = downloader
+        #: Akt oczekujący na plik GML do walidacji — filtr odpowiedzi sieciowych.
+        self._validation_pending: Optional[str] = None
+        self._validation_url: Optional[str] = None
         self._dialog: Optional[AppValidationDialog] = None
         self._convert_dialog: Optional[AppConvertDialog] = None
         self._creator_dialog: Optional[AppCreatorDialog] = None
@@ -157,6 +167,9 @@ class AppTab(QWidget):
         layout.setSpacing(12)
 
         layout.addWidget(self._build_actions())
+
+        self._template_check.report.connect(self._on_template_report)
+        self._template_check.attach()
 
         self.drop_zone = DropZone()
         self.drop_zone.files_dropped.connect(self._on_files_dropped)
@@ -228,7 +241,8 @@ class AppTab(QWidget):
         self.btn_new = QPushButton(self.tr("Nowy"))
         self.btn_new.setProperty("gsmapa_menu", True)  # miejsce na strzałkę menu (arkusz stylów)
         self.btn_new.setAccessibleName(self.tr("Nowy plik APP"))
-        self.btn_new.setToolTip(self.tr("Nowy akt, wzorcowy GeoPackage albo nowa wersja aktu z Rejestru"))
+        self.btn_new.setToolTip(self.tr("Nowy akt, wzorcowy GeoPackage, wczytanie wypełnionego pliku "
+                                        "albo nowa wersja aktu z Rejestru"))
         theme.set_icon(self.btn_new, "plus")
         self._new_menu = QMenu(self.btn_new)
         self._new_menu.setToolTipsVisible(True)
@@ -240,6 +254,11 @@ class AppTab(QWidget):
             theme.icon("file", "WindowText"), self.tr("Pusty GeoPackage APP…"))
         self._act_template.setToolTip(self.tr("Wzór: geometria w QGIS, atrybuty w tabeli"))
         self._act_template.triggered.connect(self._on_template_clicked)
+        self._act_load = self._new_menu.addAction(
+            theme.icon("folder", "WindowText"), self.tr("Wczytaj z pliku…"))
+        self._act_load.setToolTip(self.tr("Wypełniony wzorcowy GeoPackage: dane tylko do odczytu, "
+                                          "edycja w tabelach QGIS, wynik — GML"))
+        self._act_load.triggered.connect(self._on_load_file_clicked)
         self._new_menu.addSeparator()
         self._act_update = self._new_menu.addAction(
             theme.icon("refresh", "WindowText"), self.tr("Nowa wersja aktu z Rejestru…"))
@@ -325,6 +344,8 @@ class AppTab(QWidget):
         self._unit = unit
         if self._creator_dialog is not None:
             self._creator_dialog.set_unit(unit)
+        if self._template_dialog is not None:
+            self._template_dialog.set_unit(unit)
 
     def set_act_index(self, entries) -> None:
         """Indeks aktów Rejestru (z manifestu GS Mapa) — wyszukiwarka aktu w kreatorze."""
@@ -373,6 +394,105 @@ class AppTab(QWidget):
             return
         self.update_act(self._selected_act)
 
+    # --- walidacja pliku GML aktu z Rejestru (karta Plany) ---------------------------
+
+    def validate_act(self, entry: ActIndexEntry) -> bool:
+        """
+        „Waliduj” z menu aktu na karcie Plany: pobiera plik GML aktu z GS Mapa i otwiera
+        okno walidacji z tym plikiem. Plik ląduje w katalogu współdzielonym z kreatorem.
+
+        :return: ``True``, gdy rozpoczęto pobieranie opisu aktu.
+        """
+        if not self._acts_url_template:
+            self.status.setText(self.tr("Adres plików aktów GS Mapa nie jest jeszcze znany (manifest) — "
+                                        "spróbuj za chwilę."))
+            self.message.emit("Walidacja: adres plików aktów GS Mapa nie jest jeszcze znany (manifest)", "UWAGA")
+            return False
+        self._validation_pending, self._validation_url = entry.act_id, None
+        self.status.setText(self.tr("Pobieranie opisu aktu {0} z GS Mapa…").format(entry.act_id))
+        self.message.emit(f"Walidacja {entry.act_id}: pobieranie opisu", "INFO")
+        self._validation_acts().fetch(entry.act_id, self._acts_url_template)
+        return True
+
+    def _validation_note(self, text: str, level: str = "BŁĄD") -> None:
+        """Nieudana walidacja aktu z Rejestru: komunikat na karcie i w logu wtyczki."""
+        self.status.setText(text)
+        self.message.emit(text, level)
+
+    def _validation_acts(self):
+        """Usługa plików aktów (tworzona i podłączana przy pierwszym użyciu)."""
+        if self._act_service is None:
+            from ..services.acts import ActService
+
+            self._act_service = ActService()
+            self._act_service.setParent(self)
+        if not self._act_service.property("gs_mapa_validate"):
+            self._act_service.details_ready.connect(self._on_validation_details)
+            self._act_service.details_error.connect(self._on_validation_details_error)
+            self._act_service.setProperty("gs_mapa_validate", True)
+        return self._act_service
+
+    def _validation_downloads(self):
+        """Pobieranie pliku GML aktu (tworzone i podłączane przy pierwszym użyciu)."""
+        if self._downloader is None:
+            from ..services.download import FileDownloader
+
+            self._downloader = FileDownloader()
+            self._downloader.setParent(self)
+        if not self._downloader.property("gs_mapa_validate"):
+            self._downloader.finished.connect(self._on_validation_downloaded)
+            self._downloader.failed.connect(self._on_validation_download_failed)
+            self._downloader.setProperty("gs_mapa_validate", True)
+        return self._downloader
+
+    def _on_validation_details(self, act_id: str, details) -> None:
+        """Opis aktu pobrany — walidacja czeka na plik GML z pola ``dane.gml``."""
+        if act_id != self._validation_pending or self._validation_url is not None:
+            return
+        url = details.dane.get("gml")
+        if not url:
+            self._validation_pending = None
+            self._validation_note(self.tr("Akt {0} nie ma pliku GML w Rejestrze — nie można go zwalidować.")
+                                  .format(act_id), "UWAGA")
+            return
+        self._validation_url = url
+        self.status.setText(self.tr("Pobieranie pliku GML aktu {0}…").format(act_id))
+        # force=True: plik w katalogu pobranych może pochodzić ze starszej wersji aktu.
+        self._validation_downloads().download(url, self._update_dir(act_id), force=True)
+
+    def _on_validation_details_error(self, act_id: str, message: str) -> None:
+        if act_id != self._validation_pending or self._validation_url is not None:
+            return
+        self._validation_pending = None
+        self._validation_note(self.tr("Nie udało się pobrać opisu aktu {0}: {1}").format(act_id, message))
+
+    def _on_validation_downloaded(self, url: str, path: str) -> None:
+        """Plik GML na dysku — okno walidacji z tym plikiem."""
+        if url != self._validation_url:
+            return
+        self._validation_pending, self._validation_url = None, None
+        if self._validation.busy():
+            self.status.setText(self.tr("Poprzednia walidacja jeszcze trwa — plik {0} jest w oknie walidacji.")
+                                .format(Path(path).name))
+        else:
+            self.status.setText(self.tr("Walidacja {0}…").format(Path(path).name))
+        self.open_validation(path)
+
+    def _on_validation_download_failed(self, url: str, message: str) -> None:
+        if url != self._validation_url:
+            return
+        self._validation_pending, self._validation_url = None, None
+        self._validation_note(self.tr("Nie udało się pobrać pliku GML aktu: {0}").format(message))
+
+    def _update_dir(self, act_id: str) -> str:
+        """Katalog plików pobranych aktów — jak ``_update_dir`` kreatora (wspólna pamięć podręczna)."""
+        base = getattr(self._config, "download_dir", "") if self._config is not None else ""
+        if not base:
+            from qgis.core import QgsApplication
+
+            base = str(Path(QgsApplication.qgisSettingsDirPath()) / "cache" / "gs_mapa" / "akty")
+        return str(Path(base) / act_id)
+
     # --- pliki ------------------------------------------------------------------------
 
     def _last_dir(self) -> str:
@@ -392,6 +512,10 @@ class AppTab(QWidget):
             self.progress.setVisible(True)
         self.message.emit(f"Dodawanie pliku aktu: {path}", "INFO")
         return self._files.add_file(path)
+
+    def _on_template_report(self, text: str, level: str) -> None:
+        """Braki w tabeli wzoru po zapisaniu zmian — jedno zdanie w pasku komunikatów panelu."""
+        self.message.emit(text, level)
 
     def _on_progress(self, path: str, value: float) -> None:
         self.progress.setValue(int(value))
@@ -421,6 +545,32 @@ class AppTab(QWidget):
 
     def _on_template_clicked(self) -> None:
         self.open_template()
+
+    def _on_load_file_clicked(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, self.tr("Plik GeoPackage APP"), self._last_dir(),
+            self.tr("GeoPackage (*.gpkg *.GPKG);;Wszystkie pliki (*)"),
+        )
+        if path:
+            self.load_file(path)
+
+    def load_file(self, path: str) -> bool:
+        """
+        „Wczytaj z pliku…”: wypełniony wzorcowy GeoPackage w kreatorze w trybie edycji w tabelach.
+
+        Kreator czyta z pliku akt, dokumenty i rysunki (formularz tylko do odczytu), dodaje
+        warstwy pliku do projektu i pokazuje braki; wynik zapisuje „Generuj GML”.
+
+        :param path: plik ``.gpkg`` albo inny plik OGR z tabelami APP.
+        :return: ``True``, gdy kreator wczytał plik.
+        """
+        creator = self.open_creator()
+        if not creator.load_table_source(path):
+            self.message.emit(f"Nie wczytano {path}: brak aktu, dokumentów i rysunków w tabelach", "UWAGA")
+            return False
+        self._remember(path)
+        self.message.emit(f"Wczytano GeoPackage {path}: dane tylko do odczytu, GML z „Generuj GML”", "INFO")
+        return True
 
     # --- ostatnie pliki ------------------------------------------------------------------
 
@@ -579,6 +729,7 @@ class AppTab(QWidget):
         if self._template_dialog is None:
             self._template_dialog = AppTemplateDialog(
                 self.window(), config=self._config, add_file=self.add_file, message=self.message.emit,
+                unit=self._unit,
             )
         self._template_dialog.show()
         self._template_dialog.raise_()
@@ -587,6 +738,7 @@ class AppTab(QWidget):
 
     def shutdown(self) -> None:
         """Przerywa zadania w tle i zamyka okna walidacji, konwersji, wzoru i kreatora (przy rozładowaniu wtyczki)."""
+        self._template_check.detach()
         self._validation.cancel()
         self._background_validation.cancel()
         self._convert.cancel()

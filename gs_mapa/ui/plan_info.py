@@ -3,11 +3,12 @@
 import html
 import logging
 import urllib.parse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from qgis.PyQt.QtCore import QEvent, QUrl, QUrlQuery, pyqtSignal
+from qgis.PyQt.QtCore import QEvent, Qt, QUrl, QUrlQuery, pyqtSignal
 from qgis.PyQt.QtGui import QDesktopServices, QPalette
 from qgis.PyQt.QtWidgets import (
     QDialog,
@@ -34,6 +35,11 @@ from qgis.core import (
 from qgis.gui import QgsMapTool, QgsMapToolEmitPoint
 
 from ..core.colors import box_color, muted_color
+from ..core.act_index import ACT_STATUSES, ActIndexEntry, normalize_text, short_title
+from ..core.app_namespace import parse_namespace
+from ..core.app_codes import coded_values
+from ..core.app_gml import ZONE
+from ..core.app_writer import STATUSES
 from ..core.config import GSMapaConfig
 from ..core.labels import format_date, plural_acts, status_role, type_description, type_role
 from ..core.models import ActDetails, ActDocument
@@ -43,7 +49,7 @@ from ..services.acts import parse_act_id, registry_url
 from ..services.layers import LayerService
 from ..services.manifest_parser import ManifestParser
 from ..services.app_style import apply_app_style
-from ..services.app_crs import assign_file_crs
+from ..services.app_crs import assign_file_crs, enforce_file_crs
 from . import theme
 from ..services.pog_style import apply_pog_style
 
@@ -76,20 +82,102 @@ def _badge(text: str, color: str) -> str:
 #: Atrybuty obiektu pokazywane przy kliknięciu (np. strefa POG).
 _OBJECT_LABEL_FIELDS = ("oznaczenie", "nazwa")
 
+#: Właściwość warstwy z plikiem aktu, z którego warstwa powstała
+#: (``services/app_files.SOURCE_PROPERTY`` — pliki GPKG/GML dodane z dysku).
+FILE_PROPERTY = "gs_mapa/app_source"
+
+#: Pole APP z przestrzenią nazw ``idIIP`` obiektu (``PL.ZIPPZP.<nr>/<JPT>-<rodzaj>``).
+NAMESPACE_FIELD = "przestrzenNazw"
+
+#: Rodzaj zbioru APP (człon przestrzeni nazw) → typ aktu (``POG`` → ``pog``).
+NAMESPACE_TYPES = {"POG": "pog", "MPZP": "mpzp", "SUIKZP": "suikzp", "PZPW": "pzpw", "UK": "uk"}
+
 
 @dataclass
 class ActHit:
     """Akt znaleziony w klikniętym miejscu."""
+    #: Identyfikator aktu (``pog-342``); pusty dla pliku bez wpisu w indeksie aktów.
     act_id: str
     typ: str
     teryt: str = ""
     #: Opisy klikniętych obiektów aktu, np. ``12SN — strefa zieleni i rekreacji``.
     obiekty: List[str] = field(default_factory=list)
+    #: Tytuł z pliku aktu (tabela ``AktPlanowaniaPrzestrzennego``) — gdy nie ma pliku JSON aktu.
+    tytul: str = ""
+    #: Status z pliku aktu jako etykieta (``prawnie wiążący lub realizowany``).
+    status: str = ""
+    #: Początek obowiązywania z pliku aktu (data ISO).
+    obowiazuje_od: Optional[str] = None
+
+    @property
+    def z_pliku(self) -> bool:
+        """Akt pochodzi z pliku dodanego do mapy, a nie z warstw Rejestru (kafle, GPKG aktu)."""
+        return not self.act_id
+
+
+def _text_value(value) -> str:
+    """Wartość atrybutu jako tekst; ``QDateTime`` (pole datetime GPKG) jako data ISO."""
+    if value is None:
+        return ""
+    if hasattr(value, "toString"):  # QDate / QDateTime
+        return value.toString(Qt.DateFormat.ISODate)[:10]
+    return str(value).strip()
+
+
+def _status_label(value: str) -> str:
+    """Status aktu z pliku APP jako etykieta (``…/legalForce`` → ``prawnie wiążący lub realizowany``)."""
+    code = value.rsplit("/", 1)[-1].strip()
+    return STATUSES.get(code, value)
+
+
+@lru_cache(maxsize=1)
+def _zone_labels() -> Dict[str, str]:
+    """Rodzaj strefy planistycznej (kod listy) → etykieta; pusty słownik, gdy list kodowych nie ma."""
+    try:
+        return dict(coded_values()[ZONE]["nazwa"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def _object_label(feature, names) -> str:
+    """
+    Opis klikniętego obiektu, np. ``12SN — strefa zieleni i rekreacji``.
+
+    Rodzaj strefy z pliku APP jest kodem listy (``strefaZieleniIRekreacji``) — podmieniamy go
+    na etykietę, tak jak w kaflach Rejestru.
+    """
+    parts = []
+    for name in _OBJECT_LABEL_FIELDS:
+        if name not in names or feature[name] in (None, ""):
+            continue
+        value = str(feature[name])
+        parts.append(_zone_labels().get(value, value) if name == "nazwa" else value)
+    return " — ".join(parts)
+
+
+def _namespace_identity(feature, names) -> Optional[tuple]:
+    """
+    Typ aktu i kod TERYT z przestrzeni nazw ``idIIP`` obiektu pliku APP.
+
+    :return: ``(typ, TERYT)`` albo ``None``, gdy obiekt nie ma rozpoznawalnej przestrzeni nazw.
+    """
+    if NAMESPACE_FIELD not in names:
+        return None
+    parts = parse_namespace(_text_value(feature[NAMESPACE_FIELD]))
+    if parts is None:
+        return None
+    typ = NAMESPACE_TYPES.get(parts[2].upper())
+    return (typ, parts[1]) if typ else None
 
 
 def find_acts(layers, map_rect: QgsRectangle, map_crs) -> List[ActHit]:
     """
     Zbiera akty z obiektów warstw wtyczki przecinających prostokąt wyszukiwania.
+
+    Akt obiektu wynika z (w tej kolejności): atrybutu ``act_id`` (kafle Rejestru),
+    właściwości warstwy ``gsmapa/idIIP`` (plan dodany z Rejestru) albo przestrzeni nazw
+    ``idIIP`` obiektu (pliki APP dodane z dysku — dają typ i TERYT, ale nie identyfikator
+    aktu z Rejestru, dlatego ``act_id`` zostaje pusty do czasu dopasowania w indeksie).
 
     :param layers: warstwy wektorowe do przeszukania.
     :param map_rect: prostokąt wyszukiwania w układzie mapy.
@@ -98,31 +186,129 @@ def find_acts(layers, map_rect: QgsRectangle, map_crs) -> List[ActHit]:
     """
     hits: Dict[str, ActHit] = {}
     for layer in layers:
-        if not isinstance(layer, QgsVectorLayer) or layer.fields().indexOf("act_id") < 0:
+        if not isinstance(layer, QgsVectorLayer):
+            continue
+        names = layer.fields().names()
+        fixed_act = str(layer.customProperty(ACT_PROPERTY) or "").strip().lower()
+        has_act = "act_id" in names
+        if not (fixed_act or has_act or NAMESPACE_FIELD in names):
             continue
         transform = QgsCoordinateTransform(map_crs, layer.crs(), QgsProject.instance())
         rect = transform.transformBoundingBox(map_rect)
         area = QgsGeometry.fromRect(rect)
         request = QgsFeatureRequest().setFilterRect(rect).setLimit(200)
-        names = layer.fields().names()
         for feature in layer.getFeatures(request):
             if feature.hasGeometry() and not feature.geometry().intersects(area):
                 continue
-            act_id = str(feature["act_id"] or "").strip().lower()
-            parsed = parse_act_id(act_id)
-            if parsed is None:
+            act_id = (_text_value(feature["act_id"]) if has_act else "").lower() or fixed_act
+            local = None if act_id else _namespace_identity(feature, names)
+            if act_id:
+                parsed = parse_act_id(act_id)
+                if parsed is None:
+                    continue
+                key, typ = act_id, parsed[0]
+                teryt = _text_value(feature["teryt"]) if "teryt" in names else ""
+            elif local:
+                typ, teryt = local
+                key = f"{typ}:{teryt}"
+            else:
                 continue
-            hit = hits.get(act_id)
+            hit = hits.get(key)
             if hit is None:
-                teryt = feature["teryt"] if "teryt" in names else ""
-                hit = hits[act_id] = ActHit(act_id=act_id, typ=parsed[0], teryt=str(teryt or ""))
-            label = " — ".join(
-                str(feature[name]) for name in _OBJECT_LABEL_FIELDS
-                if name in names and feature[name] not in (None, "")
-            )
+                hit = hits[key] = ActHit(act_id=act_id, typ=typ, teryt=teryt)
+            # Tabela aktu pliku APP ma tytuł, status i datę obowiązywania obiektu.
+            if not hit.tytul and "tytul" in names:
+                hit.tytul = _text_value(feature["tytul"])
+            if not hit.status:
+                # W plikach z Rejestru status jest odnośnikiem do listy kodowej (``status_href``).
+                source = next((name for name in ("status", "status_href") if name in names), "")
+                if source:
+                    hit.status = _status_label(_text_value(feature[source]))
+            if not hit.obowiazuje_od and "obowiazujeOd" in names:
+                hit.obowiazuje_od = _text_value(feature["obowiazujeOd"]) or None
+            label = _object_label(feature, names)
             if label and label not in hit.obiekty:
                 hit.obiekty.append(label)
     return list(hits.values())
+
+
+def _most_current(candidates: list) -> list:
+    """Kandydaci o najlepszym statusie: obowiązujący przed przyjmowanym, opracowywanym i nieaktualnym."""
+    order = [value for value, _label in ACT_STATUSES]
+
+    def rank(entry) -> int:
+        status = (entry.status or "").strip().lower()
+        return order.index(status) if status in order else len(order)
+
+    best = min(rank(entry) for entry in candidates)
+    return [entry for entry in candidates if rank(entry) == best]
+
+
+def resolve_local_hit(hit: ActHit, entries) -> ActHit:
+    """
+    Dopasowuje akt z pliku do wpisu indeksu aktów — po typie i kodzie TERYT.
+
+    Plan ogólny jest jeden na gminę, więc para (typ, TERYT) wystarcza; przy kilku aktach
+    tego samego typu w gminie (plany miejscowe) rozstrzyga tytuł, a potem status
+    (obowiązujący przed projektem i aktem nieaktualnym). Bez jednoznacznego dopasowania
+    akt zostaje bez ``act_id`` (okno pokazuje tylko dane z pliku).
+
+    :param hit: akt znaleziony w warstwie pliku.
+    :param entries: wpisy indeksu aktów (:class:`~gs_mapa.core.act_index.ActIndexEntry`).
+    :return: akt z identyfikatorem z Rejestru albo ten sam akt bez zmian.
+    """
+    if hit.act_id or not hit.teryt:
+        return hit
+    candidates = [entry for entry in entries if entry.typ == hit.typ and entry.terc == hit.teryt]
+    if len(candidates) > 1 and hit.tytul:
+        title = normalize_text(short_title(hit.tytul))
+        candidates = [entry for entry in candidates
+                      if normalize_text(short_title(entry.tytul)) == title] or candidates
+    if len(candidates) > 1:
+        candidates = _most_current(candidates)
+    if len(candidates) != 1:
+        return hit
+    return replace(hit, act_id=candidates[0].act_id)
+
+
+def resolve_local_hits(hits: List[ActHit], entries) -> List[ActHit]:
+    """Uzupełnia o identyfikator z indeksu akty pochodzące z plików (patrz :func:`resolve_local_hit`)."""
+    return [resolve_local_hit(hit, entries) if hit.z_pliku else hit for hit in hits]
+
+
+def _node_visible(node) -> bool:
+    """Czy węzeł drzewa warstw jest widoczny razem ze swoimi grupami nadrzędnymi."""
+    while node is not None:
+        if not node.isVisible():
+            return False
+        node = node.parent()
+    return True
+
+
+def searchable_layers(project: Optional[QgsProject] = None) -> list:
+    """
+    Widoczne warstwy dodane przez wtyczkę, które mogą zawierać akty.
+
+    Trzy drogi dodania: kafle Rejestru (``gs_mapa_plugin_id``), warstwy planu z Rejestru
+    (``gsmapa/idIIP``) i pliki aktów GPKG/GML z dysku (``gs_mapa/app_source``).
+    """
+    target = project if project is not None else QgsProject.instance()
+    if target is None:
+        return []
+    root = target.layerTreeRoot()
+    found = []
+    for layer in target.mapLayers().values():
+        added = (
+            layer.customProperty(f"{LayerService.PLUGIN_ID}_id") == LayerService.PLUGIN_ID
+            or bool(layer.customProperty(ACT_PROPERTY))
+            or bool(layer.customProperty(FILE_PROPERTY))
+        )
+        if not added:
+            continue
+        node = root.findLayer(layer.id())
+        if node is not None and _node_visible(node):
+            found.append(layer)
+    return found
 
 
 class PlanInfoMapTool(QgsMapToolEmitPoint):
@@ -136,15 +322,7 @@ class PlanInfoMapTool(QgsMapToolEmitPoint):
 
     def _plugin_layers(self):
         """Widoczne warstwy dodane przez wtyczkę."""
-        root = QgsProject.instance().layerTreeRoot()
-        layers = []
-        for layer in QgsProject.instance().mapLayers().values():
-            if layer.customProperty(f"{LayerService.PLUGIN_ID}_id") != LayerService.PLUGIN_ID:
-                continue
-            node = root.findLayer(layer.id())
-            if node is not None and node.isVisible():
-                layers.append(layer)
-        return layers
+        return searchable_layers()
 
     def _on_clicked(self, point, button) -> None:
         radius = QgsMapTool.searchRadiusMU(self.canvas())
@@ -242,6 +420,9 @@ def add_vector_layers(source: str, name: str, include_tables: bool, act_id: str 
     # Tabele bez geometrii nie dostają układu z pliku GPKG (srs_id = 0) — bez tego
     # QGIS pyta użytkownika, w jakim układzie są dane.
     assign_file_crs(layers)
+    # Układ inny niż w pliku (np. układ projektu) przestawia dane na mapie bez
+    # komunikatu — po nadaniu brakujących układów plik jest źródłem prawdy.
+    enforce_file_crs(layers, source.split("|")[0])
     group = QgsProject.instance().layerTreeRoot().insertGroup(0, name)
     for layer in layers:
         QgsProject.instance().addMapLayer(layer, False)
@@ -356,7 +537,7 @@ class PlanInfoDialog(QDialog):
             self.setWindowTitle(self.tr("Informacja o planie"))
             self._browser.setHtml(
                 f"<p><b>{self.tr('W tym miejscu nie ma planu.')}</b></p>"
-                f"<p style='color:{self._muted}'>{self.tr('Narzędzie przeszukuje widoczne warstwy dodane przez ' 'wtyczkę — dodaj warstwy z panelu i kliknij w obszarze planu.')}</p>"
+                f"<p style='color:{self._muted}'>{self.tr('Narzędzie przeszukuje widoczne warstwy dodane przez wtyczkę — kafle Rejestru, warstwy planów i pliki APP (GPKG, GML). Dodaj warstwy i kliknij w obszarze planu.')}</p>"
             )
             return
         count = len(self._hits)
@@ -373,7 +554,9 @@ class PlanInfoDialog(QDialog):
 
     @staticmethod
     def _anchor(hit: ActHit) -> str:
-        return f"akt-{hit.act_id}"
+        """Znacznik aktu w oknie (akt z pliku nie ma ``act_id`` — rozróżnia go typ i TERYT)."""
+        key = hit.act_id or f"{hit.typ}-{hit.teryt}"
+        return f"akt-{key}"
 
     def _theme_rgb(self) -> tuple:
         """Kolory tekstu i tła pola treści (``Text``, ``Base``) jako ``(r, g, b)``."""
@@ -404,12 +587,13 @@ class PlanInfoDialog(QDialog):
         box = self._box
 
         badges = [_badge(hit.typ.upper(), theme.semantic(type_role(hit.typ), self._browser).name())]
-        if details and details.status:
-            role = status_role(details.status)
+        status = (details.status if details else "") or hit.status
+        if status:
+            role = status_role(status)
             color = theme.semantic(role, self._browser).name() if role else self._muted
-            badges.append(_badge(details.status, color))
+            badges.append(_badge(status, color))
 
-        title = details.tytul if details and details.tytul else type_description(hit.typ)
+        title = (details.tytul if details and details.tytul else "") or hit.tytul or type_description(hit.typ)
         title = title[:1].upper() + title[1:]
 
         meta = []
@@ -424,8 +608,14 @@ class PlanInfoDialog(QDialog):
                 if details.obowiazuje_do:
                     validity += f" do {format_date(details.obowiazuje_do)}"
                 meta.append(validity)
-        elif hit.teryt:
-            meta.append(f"TERYT {hit.teryt}")
+        else:
+            # Akt bez pliku JSON: to, co jest w pliku dodanym do mapy.
+            if hit.tytul:
+                meta.append(type_description(hit.typ))
+            if hit.teryt:
+                meta.append(f"TERYT {hit.teryt}")
+            if hit.obowiazuje_od:
+                meta.append(f"obowiązuje od {format_date(hit.obowiazuje_od)}")
 
         head = [f'<a name="{self._anchor(hit)}"></a>',
                 f'<table width="100%" cellspacing="0" cellpadding="8" bgcolor="{box}"><tr><td>',
@@ -442,10 +632,15 @@ class PlanInfoDialog(QDialog):
 
         if details:
             body = self._render_documents(details)
-        elif hit.act_id in self._errors:
+        elif hit.act_id and hit.act_id in self._errors:
             body = f"<p style='color:{muted}'>{html.escape(self._errors[hit.act_id])}</p>"
-        else:
+        elif hit.act_id:
             body = f"<p style='color:{muted}'>{self.tr('Wczytywanie dokumentów...')}</p>"
+        else:
+            # Plik aktu bez wpisu w indeksie: dokumenty i link do Rejestru są w Rejestrze.
+            body = (f"<p style='color:{muted}'>"
+                    f"{self.tr('Akt wczytany z pliku. Dokumenty i link do Rejestru wymagają wpisu w indeksie aktów — odśwież indeks i kliknij ponownie.')}"
+                    f"</p>")
         return "".join(head) + body + "<p></p>"
 
     def _section(self, title: str, rows: List[str]) -> str:

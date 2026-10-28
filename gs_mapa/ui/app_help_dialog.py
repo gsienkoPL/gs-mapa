@@ -33,7 +33,7 @@ class AppHelpDialog(QDialog):
         layout = QVBoxLayout(self)
         intro = QLabel(self.tr(
             "Plik aktu planowania przestrzennego w wersji APP 3.0 to plik GML, który można "
-            "przygotować na trzy sposoby. Poniżej każdy krok; wszystkie okna wtyczki są dostępne "
+            "przygotować na cztery sposoby. Poniżej każdy krok; wszystkie okna wtyczki są dostępne "
             "z karty „Pliki APP”."
         ))
         intro.setWordWrap(True)
@@ -58,7 +58,13 @@ class AppHelpDialog(QDialog):
             self.tr("Pusty GeoPackage APP (Nowy ▾ → Pusty GeoPackage APP) — wzorcowy plik "
                     "GeoPackage z tabelami aktu i wszystkimi atrybutami APP 3.0. Geometrię rysujesz "
                     "w QGIS, atrybuty wypełniasz w tabeli atrybutów, a kreator czyta z niego pola "
-                    "bez mapowania."),
+                    "bez mapowania. Pola z list kodowych (status, charakter ustalenia, typ aktu, "
+                    "poziom, rola dokumentu, dziennik, rodzaj strefy) mają listy wyboru z etykietami."),
+            self.tr("Wczytanie z pliku (Nowy ▾ → Wczytaj z pliku) — wypełniony wzorcowy GeoPackage "
+                    "otwiera kreator w trybie edycji w tabelach: akt, dokumenty i rysunki są tylko "
+                    "do odczytu (zmieniasz je w tabelach QGIS), „Odśwież z pliku” czyta je ponownie, "
+                    "a „Generuj GML” zapisuje wynik. Warstwy pliku są dodawane do projektu, więc "
+                    "zasięg aktu i strefy są podpięte od razu."),
             self.tr("Konwersja starszego pliku (Konwertuj…) — plik GML APP 1.0 albo 2.0 "
                     "przepisywany jest na APP 3.0: przestrzeń nazw i schemat 3.0, kolekcja "
                     "wfs:FeatureCollection, wymagane w 3.0 daty. Identyfikatory i geometria "
@@ -71,4 +77,28 @@ class AppHelpDialog(QDialog):
                     "sekwencyjnie i przeliczałby go przy każdym odświeżeniu mapy."),
         ]
         items = "".join(f"<li>{step}</li>" for step in steps)
-        return f"<ul>{items}</ul>"
+        return f"<ul>{items}</ul>{self._dictionary_html()}"
+
+    def _dictionary_html(self) -> str:
+        """
+        Słownik pól APP 3.0: co znaczy każdy atrybut, czego wymaga standard.
+
+        Opisy i wymagalność pochodzą z urzędowego schematu (``core/app_field_help``), więc
+        okno nie powtarza wiedzy z kodu. Nagłówki tabel są tłumaczone tutaj.
+        """
+        from ..core.app_field_help import LAYER_LABELS, LAYER_ORDER, rows
+
+        parts = [
+            f"<h3>{self.tr('Słownik pól (APP 3.0)')}</h3>",
+            f"<p>{self.tr('Opis każdego atrybutu pochodzi z urzędowego schematu APP 3.0 — te same '
+                          'teksty są w podpowiedziach pól formularza.')}</p>",
+        ]
+        for layer in LAYER_ORDER:
+            parts.append(f"<h4>{LAYER_LABELS.get(layer, layer)}</h4>")
+            body = "".join(
+                "<tr><td><b>{0}</b><br/><code>{1}</code></td><td>{2}{3}</td></tr>".format(
+                    row["label"], row["field"], row["description"],
+                    " <i>" + self.tr("(wymagane)") + "</i>" if row["required"] else "")
+                for row in rows(layer))
+            parts.append(f"<table width='100%' cellspacing='0' cellpadding='4'>{body}</table>")
+        return "".join(parts)

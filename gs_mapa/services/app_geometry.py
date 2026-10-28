@@ -19,8 +19,9 @@ ani luką, ani nakładaniem w sensie planistycznym. Tolerancja jest jednak liczo
 przecięcia, nie tylko z jego części szerokich: nakładanie 0,6 m² jest nakładaniem niezależnie
 od tego, jak wąski jest pasek.
 
-Warstwy czytane są z pliku GML przez dostawcę OGR. Moduł nie tworzy widżetów ani nie dodaje
-nic do projektu, więc może działać w wątku zadania (``QgsTask``).
+Warstwy czytane są z pliku GML przez dostawcę OGR albo z modelu kreatora (``check_plan_geometry``
+— bez pliku). Moduł nie tworzy widżetów ani nie dodaje nic do projektu, więc może działać
+w wątku zadania (``QgsTask``).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
-from qgis.core import Qgis, QgsGeometry, QgsSpatialIndex, QgsVectorLayer
+from qgis.core import Qgis, QgsGeometry, QgsPointXY, QgsSpatialIndex, QgsVectorLayer
 
 from ..core.app_gml import ACT, SPATIAL_CLASSES, ZONE
 from ..core.app_rules import ERROR, INFO, WARNING, Finding
@@ -155,46 +156,44 @@ def _read(layer: QgsVectorLayer, kind: str, check: Callable[[], None]) -> List[_
     return items
 
 
-def check_layers(layers: Dict[str, QgsVectorLayer], limits: Optional[dict] = None,
-                 progress: Optional[Callable[[float], None]] = None,
-                 is_canceled: Optional[Callable[[], bool]] = None) -> GeometryResult:
+def _ring_polygons(polygons) -> QgsGeometry:
     """
-    Sprawdza geometrię warstw aktu.
+    Geometria z list pierścieni (``[[(x, y), ...], ...]``) — jak w modelu kreatora.
 
-    :param layers: klasa APP -> warstwa (``AktPlanowaniaPrzestrzennego`` i klasy z geometrią).
-    :param limits: tolerancje (``outside_m2``, ``overlap_m2``, ``gap_m2``).
-    :param progress: wywoływane z postępem 0–100.
-    :param is_canceled: zwraca ``True``, gdy trzeba przerwać (rzuca :class:`Canceled`).
+    :param polygons: lista wieloboków, każdy jako lista pierścieni (pierwszy zewnętrzny).
+    :return: pojedyncza powierzchnia (części scalone) albo pusta geometria.
     """
-    limits = {**DEFAULT_LIMITS, **(limits or {})}
-    result = GeometryResult()
+    parts = []
+    for rings in polygons or []:
+        if not rings:
+            continue
+        polygon = QgsGeometry.fromPolygonXY(
+            [[QgsPointXY(float(x), float(y)) for x, y in ring] for ring in rings])
+        if not polygon.isEmpty():
+            parts.append(polygon)
+    if not parts:
+        return QgsGeometry()
+    return QgsGeometry.unaryUnion(parts) if len(parts) > 1 else parts[0]
+
+
+def _check_geometries(act: Optional[_Item], items: Dict[str, List[_Item]], limits: dict,
+                      result: GeometryResult, report: Callable[[float], None],
+                      check: Callable[[], None], missing_act_error: bool = False) -> GeometryResult:
+    """
+    Wspólna część kontroli: poprawność geometrii, położenie w akcie, nakładanie i luki.
+
+    :param act: zasięg aktu (``None`` — brak poprawnej geometrii aktu).
+    :param items: klasa APP -> obiekty z geometrią.
+    :param missing_act_error: dodaj komunikat o braku geometrii aktu (gdy akt był w źródle).
+    """
     out = result.findings
-
-    def check():
-        if is_canceled is not None and is_canceled():
-            raise Canceled()
-
-    def report(value):
-        if progress is not None:
-            progress(value)
 
     def add(severity, message, item: Optional[_Item] = None, wkt=None, measure=None, field_name="geometria"):
         out.append(Finding(RULE, severity, message, object_id=item.gml_id if item else None,
                            kind=item.kind if item else None, field=field_name, wkt=wkt, measure=measure))
 
-    act_layer = layers.get(ACT)
-    if act_layer is not None:
-        result.crs = act_layer.crs().authid()
-    items: Dict[str, List[_Item]] = {}
-    kinds = [k for k in (ACT,) + SPATIAL_CLASSES if k in layers]
-    for i, kind in enumerate(kinds):
-        items[kind] = _read(layers[kind], kind, check)
-        if not result.crs:
-            result.crs = layers[kind].crs().authid()
-        report(30.0 * (i + 1) / max(len(kinds), 1))
-
-    # 1. Poprawność geometrii.
-    every = [item for kind in kinds for item in items[kind]]
+    # 1. Poprawność geometrii (akt: także wieloczęściowy zasięg).
+    every = ([act] if act is not None else []) + [item for kind in SPATIAL_CLASSES for item in items.get(kind, [])]
     for n, item in enumerate(every):
         check()
         geometry = item.geometry
@@ -217,12 +216,10 @@ def check_layers(layers: Dict[str, QgsVectorLayer], limits: Optional[dict] = Non
             report(30 + 15.0 * n / max(len(every), 1))
     report(45)
 
-    acts = [item for item in items.get(ACT, []) if item.valid]
-    if not acts:
-        if ACT in layers:
+    if act is None or not act.valid:
+        if missing_act_error:
             add(ERROR, "Brak poprawnej geometrii aktu — pominięto kontrolę położenia, nakładania i luk.")
         return result
-    act = acts[0]
     result.measurements["act_area_m2"] = round(act.geometry.area(), 2)
     engine = QgsGeometry.createGeometryEngine(act.geometry.constGet())
     engine.prepareGeometry()
@@ -318,6 +315,79 @@ def check_layers(layers: Dict[str, QgsVectorLayer], limits: Optional[dict] = Non
                 wkt=slivers.wkt(key), measure=round(slivers.area(key), 4))
     report(100)
     return result
+
+
+def check_layers(layers: Dict[str, QgsVectorLayer], limits: Optional[dict] = None,
+                 progress: Optional[Callable[[float], None]] = None,
+                 is_canceled: Optional[Callable[[], bool]] = None) -> GeometryResult:
+    """
+    Sprawdza geometrię warstw aktu.
+
+    :param layers: klasa APP -> warstwa (``AktPlanowaniaPrzestrzennego`` i klasy z geometrią).
+    :param limits: tolerancje (``outside_m2``, ``overlap_m2``, ``gap_m2``).
+    :param progress: wywoływane z postępem 0–100.
+    :param is_canceled: zwraca ``True``, gdy trzeba przerwać (rzuca :class:`Canceled`).
+    """
+    limits = {**DEFAULT_LIMITS, **(limits or {})}
+    result = GeometryResult()
+
+    def check():
+        if is_canceled is not None and is_canceled():
+            raise Canceled()
+
+    def report(value):
+        if progress is not None:
+            progress(value)
+
+    act_layer = layers.get(ACT)
+    if act_layer is not None:
+        result.crs = act_layer.crs().authid()
+    items: Dict[str, List[_Item]] = {}
+    kinds = [k for k in (ACT,) + SPATIAL_CLASSES if k in layers]
+    for i, kind in enumerate(kinds):
+        items[kind] = _read(layers[kind], kind, check)
+        if not result.crs:
+            result.crs = layers[kind].crs().authid()
+        report(30.0 * (i + 1) / max(len(kinds), 1))
+
+    act = next((item for item in items.get(ACT, []) if item.valid), None)
+    return _check_geometries(act, items, limits, result, report, check, missing_act_error=ACT in layers)
+
+
+def check_plan_geometry(plan, limits: Optional[dict] = None,
+                        progress: Optional[Callable[[float], None]] = None,
+                        is_canceled: Optional[Callable[[], bool]] = None) -> GeometryResult:
+    """
+    Kontrole geometrii planu z kreatora — przed zapisem, bez pliku i bez warstw.
+
+    Ten sam zestaw kontroli co walidator pliku (poprawność, wyjście poza akt, nakładanie,
+    luki), na geometrii już przeliczonej do układu pliku i zaokrąglonej do liczby miejsc
+    z formularza. Dzięki temu luki i nakładania wychodzą przy „Sprawdź dane”, a nie dopiero
+    po zapisaniu pliku i uruchomieniu walidacji.
+
+    :param plan: model ``AppPlan`` (``act.geometry`` i ``objects`` jako listy pierścieni).
+    :param limits: tolerancje (``outside_m2``, ``overlap_m2``, ``gap_m2``).
+    :param progress: wywoływane z postępem 0–100.
+    :param is_canceled: zwraca ``True``, gdy trzeba przerwać (rzuca :class:`Canceled`).
+    """
+    limits = {**DEFAULT_LIMITS, **(limits or {})}
+    result = GeometryResult(crs=f"EPSG:{plan.crs}")
+
+    def check():
+        if is_canceled is not None and is_canceled():
+            raise Canceled()
+
+    def report(value):
+        if progress is not None:
+            progress(value)
+
+    items: Dict[str, List[_Item]] = {}
+    for kind in SPATIAL_CLASSES:
+        items[kind] = [_Item(None, kind, obj.designation or kind, _ring_polygons([obj.geometry]))
+                       for obj in plan.objects if obj.kind == kind]
+    act = _Item(None, ACT, "Akt", _ring_polygons(plan.act.geometry)) if plan.act.geometry else None
+    report(30)
+    return _check_geometries(act, items, limits, result, report, check)
 
 
 def check_gml_geometry(path: str, classes, limits: Optional[dict] = None,
