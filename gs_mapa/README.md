@@ -11,3 +11,6 @@ Wtyczka do QGIS 4 służąca do przeglądania i dodawania warstw z publicznego r
 ## Instalacja
 1. Skopiuj folder `gs_mapa` do katalogu wtyczek QGIS.
 2. Zrestartuj QGIS lub przeładuj wtyczki w Menedżerze Wtyczek.
+
+## Licencja
+GPL-3.0 — pełny tekst w pliku `LICENSE` w tym katalogu.

@@ -5,4 +5,4 @@ generowany z tej wartości (``python3 scripts/release.py bump``),
 a ``gs_mapa/__init__.py`` importuje ją stąd.
 """
 
-VERSION = "0.1.6"
+VERSION = "0.1.7"
