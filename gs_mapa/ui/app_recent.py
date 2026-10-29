@@ -3,7 +3,8 @@ Lista „Ostatnie pliki” na karcie „Pliki APP”.
 
 Wiersz: ikona statusu ostatniej walidacji, nazwa pliku (elidowana w środku),
 wersja APP i wynik, akcja kontekstowa („Do APP 3.0…”, „Waliduj”) oraz menu „…”
-z resztą akcji (Dodaj do mapy, Waliduj, Pokaż w Finderze/Explorerze, Usuń z listy).
+z resztą akcji (Edytuj, Szczegóły, Dodaj do mapy, Waliduj, Pokaż w Finderze/Explorerze,
+Usuń z listy).
 
 Kolor nigdy nie jest jedynym nośnikiem informacji — obok ikony jest zawsze słowo
 („bez błędów”, „3 błędy, 1 ostrzeżenie”, „nie sprawdzono”).
@@ -44,7 +45,7 @@ _STATUS_ICONS = {
 class _Row(QWidget):
     """Jeden plik na liście ostatnich plików."""
 
-    #: Akcja na wierszu: ``add``, ``validate``, ``convert``, ``show``, ``remove``.
+    #: Akcja na wierszu: ``edit``, ``details``, ``add``, ``validate``, ``convert``, ``show``, ``remove``.
     clicked = pyqtSignal(str, object)
 
     def __init__(self, entry: Dict, parent=None):
@@ -156,6 +157,14 @@ class _Row(QWidget):
         """Menu „…” budowane przy otwarciu (akcje zależą od wersji pliku)."""
         self._menu.clear()
         entry = self._entry
+        edit = self._menu.addAction(theme.icon("edit", "WindowText"), self.tr("Edytuj"))
+        edit.setToolTip(self.tr("Otwórz plik w kreatorze: GML jako nowa wersja aktu, "
+                                "GeoPackage w trybie edycji w tabelach"))
+        edit.triggered.connect(lambda: self.clicked.emit("edit", entry))
+        details = self._menu.addAction(theme.icon("info", "WindowText"), self.tr("Szczegóły"))
+        details.setToolTip(self.tr("Pokaż zawartość pliku — akt, dokumenty i rysunki — bez edycji"))
+        details.triggered.connect(lambda: self.clicked.emit("details", entry))
+        self._menu.addSeparator()
         add = self._menu.addAction(theme.icon("layers", "WindowText"), self.tr("Dodaj do mapy"))
         add.triggered.connect(lambda: self.clicked.emit("add", entry))
         validate = self._menu.addAction(theme.icon("validate", "WindowText"), self.tr("Waliduj"))
@@ -175,7 +184,7 @@ class _Row(QWidget):
 class RecentFilesPanel(QWidget):
     """Lista ostatnich plików APP (pamiętana w ustawieniach wtyczki)."""
 
-    #: Akcja na wierszu: ``add``, ``validate``, ``convert``, ``show``, ``remove``.
+    #: Akcja na wierszu: ``edit``, ``details``, ``add``, ``validate``, ``convert``, ``show``, ``remove``.
     action_requested = pyqtSignal(str, str)
 
     def __init__(self, parent=None):

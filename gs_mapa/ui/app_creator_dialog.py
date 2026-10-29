@@ -14,9 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from qgis.PyQt.QtCore import QDate, QDateTime, Qt
+from qgis.PyQt.QtCore import QDate, QDateTime, QTime, Qt
 from qgis.PyQt.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -40,6 +41,7 @@ from qgis.PyQt.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -54,8 +56,8 @@ from ..core.app_gml import ACT, DOCUMENT, DRAWING, OSDIS, OUZ, OZS, ZONE, AppGml
 from ..core.app_namespace import ACT_TYPE_KINDS, NamespaceCandidate, jpt_code, namespace_candidates, parse_namespace
 from ..core.app_rules import SUPPORTED_EPSG
 from ..core.app_update import (
-    ActReferenceError, ActSource, act_from_values, document_from_values, drawing_from_values, parse_act_reference,
-    read_act_source, resolve_act_id, update_draft, update_filename,
+    ActReferenceError, ActSource, act_from_values, document_from_values, drawing_from_values, file_draft,
+    parse_act_reference, read_act_source, resolve_act_id, update_draft, update_filename,
 )
 from ..core.app_defaults import document_defaults, effective_from, is_adopting
 from ..core.app_field_help import tooltip as field_tooltip
@@ -81,6 +83,8 @@ logger = logging.getLogger("GSMapa.AppCreator")
 DRAFT_VERSION = 1
 SPATIAL_KINDS = (ZONE, OUZ, OZS, OSDIS)
 TAB_ACT, TAB_DOCUMENTS, TAB_DRAWINGS, TAB_OBJECTS = range(4)
+#: Kolumna „Łącze” (odnośnik „Pobierz”) w tabelach dokumentów i rysunków.
+_DOCUMENTS_LINK_COLUMN, _DRAWINGS_LINK_COLUMN = 5, 2
 #: Role kolorów poziomów uwag (``theme``).
 _COLORS = {"error": "err", "warning": "warn"}
 _SEVERITY = {"error": "błąd", "warning": "ostrzeżenie", "info": "informacja"}
@@ -111,6 +115,23 @@ def _set_combo(combo: QComboBox, code) -> None:
     index = combo.findData(code)
     if index >= 0:
         combo.setCurrentIndex(index)
+
+
+def _show_code(combo: QComboBox, code) -> None:
+    """
+    Pokazuje wartość z pliku, także wtedy, gdy jej nie ma na liście kodowej.
+
+    Kody spoza listy (np. ``status`` z APP 1.0) są dopisywane do pola, żeby podgląd pokazywał
+    treść pliku, a nie wartość domyślną listy. Dopisanie zdarza się wyłącznie w oknie
+    „Szczegóły”, gdzie nic nie jest zapisywane.
+    """
+    if code in (None, ""):
+        return
+    index = combo.findData(code)
+    if index < 0:
+        combo.addItem(str(code), code)
+        index = combo.count() - 1
+    combo.setCurrentIndex(index)
 
 
 def _field_tooltip(widget: QWidget, layer: str, field: str) -> None:
@@ -164,7 +185,7 @@ class OptionalDate(QWidget):
 class OptionalMoment(QWidget):
     """Data i godzina opcjonalna (``xs:dateTime``; ``None``, gdy nie zaznaczono)."""
 
-    def __init__(self, label: str = "", parent=None):
+    def __init__(self, label: str = "", parent=None, midnight: bool = False):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -176,19 +197,40 @@ class OptionalMoment(QWidget):
         layout.addWidget(self.check)
         layout.addWidget(self.edit)
         layout.addStretch(1)
-        self.check.toggled.connect(self.edit.setEnabled)
+        self._midnight = midnight
+        self._updating = False
+        self.check.toggled.connect(self._on_toggled)
+        if self._midnight:
+            self.edit.dateChanged.connect(self._snap_midnight)
+
+    def _on_toggled(self, checked: bool) -> None:
+        self.edit.setEnabled(checked)
+        if checked and self._midnight and not self._updating:
+            self._snap_midnight()
+
+    def _snap_midnight(self, *args) -> None:
+        if self._updating:
+            return
+        moment = self.edit.dateTime()
+        if moment.time() != QTime(0, 0, 0):
+            moment.setTime(QTime(0, 0, 0))
+            self.edit.setDateTime(moment)
 
     def value(self) -> Optional[str]:
         return self.edit.dateTime().toUTC().toString("yyyy-MM-dd'T'HH:mm:ss'Z'") if self.check.isChecked() else None
 
     def set_value(self, value: Optional[str]) -> None:
-        self.check.setChecked(bool(value))
-        if value:
-            moment = QDateTime.fromString(value, Qt.DateFormat.ISODate)
-            if not moment.isValid():
-                moment = QDateTime.fromString(value.replace("Z", ""), Qt.DateFormat.ISODate)
-            if moment.isValid():
-                self.edit.setDateTime(moment.toLocalTime())
+        self._updating = True
+        try:
+            self.check.setChecked(bool(value))
+            if value:
+                moment = QDateTime.fromString(value, Qt.DateFormat.ISODate)
+                if not moment.isValid():
+                    moment = QDateTime.fromString(value.replace("Z", ""), Qt.DateFormat.ISODate)
+                if moment.isValid():
+                    self.edit.setDateTime(moment.toLocalTime())
+        finally:
+            self._updating = False
 
 
 def _date_edit(value: Optional[str] = None) -> QDateEdit:
@@ -198,6 +240,15 @@ def _date_edit(value: Optional[str] = None) -> QDateEdit:
     return edit
 
 
+def _format_size(size: Optional[int]) -> str:
+    """Rozmiar pliku do komunikatu pobierania (pusty, gdy serwer go nie podał)."""
+    if not size:
+        return ""
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    return f"{max(1, size // 1024)} kB"
+
+
 # --- okna pomocnicze: dokument i rysunek ------------------------------------------
 
 
@@ -205,11 +256,18 @@ class DocumentDialog(QDialog):
     """Formularz dokumentu formalnego (uchwała, rozstrzygnięcie, wyrok…)."""
 
     def __init__(self, codes: dict, value: Optional[dict] = None, parent=None,
-                 defaults: Optional[dict] = None):
+                 defaults: Optional[dict] = None, read_only: bool = False):
+        """
+        :param defaults: propozycje z jednostki (organ, dziennik, źródło) — w podglądzie
+            nieużywane, bo pola mają pokazywać wyłącznie zawartość pliku.
+        :param read_only: podgląd dokumentu: pola czytelne, bez edycji i bez „OK”.
+        """
         super().__init__(parent)
         # Własny wygląd wtyczki (makiety docs/ui), niezależny od stylu Qt w QGIS.
         theme.apply_plugin_style(self)
         self._attempted = False
+        #: Podgląd: żadne pole nie przyjmuje zmian, wyjściem jest „Zamknij”.
+        self._read_only = bool(read_only)
         #: Propozycje z jednostki (``core.app_defaults.document_defaults``): organ, dziennik, źródło.
         self._defaults = defaults or {}
         #: Data, którą „data wejścia w życie” powtarza za datą uchwały (``None`` = powiązanie zerwane).
@@ -269,6 +327,8 @@ class DocumentDialog(QDialog):
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+        #: Pasek przycisków — w podglądzie zostaje jedno wyjście („Zamknij”).
+        self.buttons = buttons
         self.local_id.textChanged.connect(self._mark)
         self.title.textChanged.connect(self._mark)
         self.date.dateChanged.connect(self._follow_date)
@@ -283,9 +343,27 @@ class DocumentDialog(QDialog):
                               (self.journal, "dziennikUrzedowy"), (self.links, "lacze")):
             _field_tooltip(widget, DOCUMENT, field)
         if value:
-            self.set_value(value)
-        self._apply_defaults()
+            # Data wejścia w życie z pliku jest wartością źródłową — w podglądzie jej nie „poprawiamy”.
+            filling, self._filling = self._filling, self._read_only
+            try:
+                self.set_value(value)
+            finally:
+                self._filling = filling
+        if self._read_only:
+            self._make_read_only()
+        else:
+            self._apply_defaults()
         self._mark()
+
+    def _make_read_only(self) -> None:
+        """Podgląd dokumentu: pola zostają czytelne (można kopiować), ale bez edycji."""
+        self.setWindowTitle(self.tr("Dokument formalny — podgląd"))
+        for widget in (self.local_id, self.title, self.short_name, self.number, self.authority,
+                       self.reference, self.links):
+            widget.setReadOnly(True)
+        for widget in (self.role, self.date, self.date_type, self.entry, self.repeal, self.journal):
+            widget.setEnabled(False)
+        self.buttons.setStandardButtons(QDialogButtonBox.StandardButton.Close)
 
     def _apply_defaults(self) -> None:
         """
@@ -383,11 +461,16 @@ class DocumentDialog(QDialog):
 class DrawingDialog(QDialog):
     """Formularz rysunku aktu (GeoTIFF części graficznej)."""
 
-    def __init__(self, value: Optional[dict] = None, parent=None):
+    def __init__(self, value: Optional[dict] = None, parent=None, read_only: bool = False):
+        """
+        :param read_only: podgląd rysunku: pola czytelne, bez edycji i bez „OK”.
+        """
         super().__init__(parent)
         # Własny wygląd wtyczki (makiety docs/ui), niezależny od stylu Qt w QGIS.
         theme.apply_plugin_style(self)
         self._attempted = False
+        #: Podgląd: żadne pole nie przyjmuje zmian, wyjściem jest „Zamknij”.
+        self._read_only = bool(read_only)
         self.setWindowTitle(self.tr("Rysunek aktu planowania przestrzennego"))
         self.resize(560, 420)
         form = QFormLayout(self)
@@ -404,7 +487,7 @@ class DrawingDialog(QDialog):
         self.scale.setValue(1000)
         self.scale.setPrefix("1:")
         self.description = QLineEdit()
-        self.version_end = OptionalMoment(self.tr("rysunek wycofany"))
+        self.version_end = OptionalMoment(self.tr("rysunek wycofany"), midnight=True)
         self.version_end.setToolTip(self.tr("koniecWersjiObiektu — gdy ta wersja rysunku przestaje "
                                            "obowiązywać; puste pole = wersja otwarta"))
         self.effective_from = OptionalDate(self.tr("inna niż aktu"))
@@ -423,6 +506,8 @@ class DrawingDialog(QDialog):
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+        #: Pasek przycisków — w podglądzie zostaje jedno wyjście („Zamknij”).
+        self.buttons = buttons
         for widget in (self.local_id, self.title, self.link):
             widget.textChanged.connect(self._mark)
         for widget, field in ((self.local_id, "lokalnyId"), (self.title, "tytul"), (self.link, "lacze"),
@@ -431,9 +516,28 @@ class DrawingDialog(QDialog):
                               (self.version_end, "koniecWersjiObiektu"), (self.effective_from, "obowiazujeOd"),
                               (self.effective_to, "obowiazujeDo")):
             _field_tooltip(widget, DRAWING, field)
+        self.version_end.check.toggled.connect(self._on_version_end_changed)
+        self.version_end.edit.dateTimeChanged.connect(self._on_version_end_changed)
         if value:
             self.set_value(value)
+        if self._read_only:
+            self._make_read_only()
         self._mark()
+
+    def _make_read_only(self) -> None:
+        """Podgląd rysunku: pola zostają czytelne (można kopiować), ale bez edycji."""
+        self.setWindowTitle(self.tr("Rysunek aktu — podgląd"))
+        for widget in (self.local_id, self.title, self.link, self.legend, self.crs, self.description):
+            widget.setReadOnly(True)
+        for widget in (self.scale, self.version_end, self.effective_from, self.effective_to):
+            widget.setEnabled(False)
+        self.buttons.setStandardButtons(QDialogButtonBox.StandardButton.Close)
+
+    def _on_version_end_changed(self, *args) -> None:
+        """Koniec wersji rysunku wyznacza koniec obowiązywania (dzień wcześniej)."""
+        if self.version_end.check.isChecked():
+            end_date = self.version_end.edit.date()
+            self.effective_to.set_value(end_date.addDays(-1).toString("yyyy-MM-dd"))
 
     def _required(self):
         return (self.local_id, self.title, self.link)
@@ -650,11 +754,18 @@ class AppCreatorDialog(QDialog):
         self._resolver = CodeResolver(self.codes)
         self._documents: List[dict] = []
         self._drawings: List[dict] = []
+        #: Pobieranie plików z łączy dokumentów i rysunków (własny obiekt, niezależny od pobierania GML aktu).
+        self._link_downloader = None
+        #: Trwające pobrania łączy: adres → (zakładka, nazwa pliku, czy wczytać rysunek do mapy).
+        self._pending_links: Dict[str, tuple] = {}
         #: Plik GeoPackage wczytany jako źródło danych („Wczytaj z pliku”) — tryb edycji w tabelach.
         self._table_source: Optional[str] = None
         self._table_mode = False
         #: Pola zablokowane w trybie tabel: widget -> (enabled, read_only, edit_triggers).
         self._table_locked: Dict[QWidget, tuple] = {}
+        #: Okno w trybie „Szczegóły”: te same zakładki, ale bez edycji i bez zapisu.
+        self._read_only = False
+        self._details_name = ""
         #: Uwagi w kolejności listy komunikatów (dla naprawy zaznaczonej pozycji).
         self._shown_issues: List[PlanIssue] = []
         self._result_path: Optional[str] = None
@@ -683,7 +794,9 @@ class AppCreatorDialog(QDialog):
         self.tabs.addTab(_scroll(self._build_act_tab()), self.tr("Akt"))
         self.tabs.addTab(self._build_list_tab("documents"), self.tr("Dokumenty"))
         self.tabs.addTab(self._build_list_tab("drawings"), self.tr("Rysunki"))
-        self.tabs.addTab(_scroll(self._build_objects_tab()), self.tr("Strefy i regulacje"))
+        #: Zakładka źródła obiektów — ustawienie kreatora, więc w podglądzie jest ukrywana.
+        self._objects_page = _scroll(self._build_objects_tab())
+        self.tabs.addTab(self._objects_page, self.tr("Strefy i regulacje"))
         #: Tytuły zakładek bez liczników — liczniki braków dokłada ``_update_tab_titles``.
         self._tab_titles = [self.tabs.tabText(index) for index in range(self.tabs.count())]
         splitter.addWidget(self.tabs)
@@ -722,7 +835,8 @@ class AppCreatorDialog(QDialog):
         layout.addWidget(splitter, 1)
 
         out_row = QHBoxLayout()
-        out_row.addWidget(QLabel(self.tr("Plik wynikowy *:")))
+        self._output_label = QLabel(self.tr("Plik wynikowy *:"))
+        out_row.addWidget(self._output_label)
         self.output = QgsFileWidget()
         self.output.setStorageMode(QgsFileWidget.StorageMode.SaveFile)
         self.output.setFilter(self.tr("GML (*.gml)"))
@@ -819,6 +933,8 @@ class AppCreatorDialog(QDialog):
         cut_row.addWidget(self.cut_info, 1)
         update_layout.addLayout(cut_row)
         self.btn_cut.clicked.connect(self._open_cut)
+        #: Sekcja aktualizacji aktu — w podglądzie („Szczegóły”) ukrywana.
+        self._update_box = update
         layout.addWidget(update)
 
         template = QGroupBox(self.tr("Wypełnij z pliku GeoPackage"))
@@ -896,7 +1012,7 @@ class AppCreatorDialog(QDialog):
         form.addRow(self.tr("lokalnyId *:"), self.local_id)
         form.addRow(self.tr("wersjaId *:"), version_row)
         form.addRow(self.tr("Początek wersji obiektu *:"), self.version_start)
-        self.version_end = OptionalMoment(self.tr("akt zamknięty"))
+        self.version_end = OptionalMoment(self.tr("akt zamknięty"), midnight=True)
         self.version_end.setToolTip(self.tr(
             "koniecWersjiObiektu — wypełnij, gdy ta wersja aktu przestaje obowiązywać "
             "(uchylenie, wygaśnięcie); puste pole = wersja otwarta"))
@@ -1024,6 +1140,8 @@ class AppCreatorDialog(QDialog):
                               (self.modification, "modyfikacja"), (self.change_count, "zmiana")):
             _field_tooltip(widget, ACT, field)
         self.btn_now.clicked.connect(self.new_version)
+        self.version_end.check.toggled.connect(self._on_version_end_changed)
+        self.version_end.edit.dateTimeChanged.connect(self._on_version_end_changed)
         self.btn_namespace.clicked.connect(self.find_namespace)
         self.btn_update_load.clicked.connect(self._on_update_load_clicked)
         self.update_ref.returnPressed.connect(self._on_update_load_clicked)
@@ -1043,47 +1161,74 @@ class AppCreatorDialog(QDialog):
         page = QWidget()
         layout = QVBoxLayout(page)
         if kind == "documents":
-            headers = [self.tr("Rola"), self.tr("lokalnyId"), self.tr("Tytuł"), self.tr("Numer"), self.tr("Data")]
+            headers = [self.tr("Rola"), self.tr("lokalnyId"), self.tr("Tytuł"), self.tr("Numer"),
+                       self.tr("Data"), self.tr("Łącze")]
             hint = self.tr("Akt musi wskazywać dokument przystępujący albo uchwalający; akt obowiązujący — "
                            "dokładnie jeden dokument uchwalający (OCL ACT-01, ACT-02).")
+            #: Kolumna rozciągana to „Tytuł” (adres łącza zostaje w wąskiej kolumnie z podpowiedzią).
+            stretch = 2
         else:
             headers = [self.tr("lokalnyId"), self.tr("Tytuł"), self.tr("Łącze"), self.tr("Skala")]
             hint = self.tr("Rysunek (GeoTIFF z georeferencją) jest wymagany w obowiązującym akcie bez stref "
                            "i regulacji (OCL ACT-07). wersjaId i obowiązuje od — jak w akcie.")
+            stretch = 1
         label = QLabel(hint)
         label.setWordWrap(True)
         theme.style_muted(label)
         layout.addWidget(label)
+        #: Podpowiedź nad tabelą — w podglądzie („Szczegóły”) mówi, jak obejrzeć jeden dokument/rysunek.
+        if kind == "documents":
+            self._documents_hint = label
+        else:
+            self._drawings_hint = label
         table = QTableWidget(0, len(headers))
         table.setHorizontalHeaderLabels(headers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.horizontalHeader().setSectionResizeMode(len(headers) - 3 if kind == "documents" else 1,
-                                                      QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(stretch, QHeaderView.ResizeMode.Stretch)
         theme.align_headers(table)
         layout.addWidget(table, 1)
         row = QHBoxLayout()
         add, edit, remove = (QPushButton(self.tr("Dodaj…")), QPushButton(self.tr("Edytuj…")),
                              QPushButton(self.tr("Usuń")))
-        for button in (add, edit, remove):
+        #: Pobranie pliku z łącza czyta tylko dane pliku, więc działa też w podglądzie („Szczegóły”).
+        download = QPushButton(self.tr("Pobierz…"))
+        for button in (add, edit, remove, download):
             row.addWidget(button)
+        map_button = None
+        if kind == "drawings":
+            map_button = QPushButton(self.tr("Dodaj do mapy"))
+            row.addWidget(map_button)
         row.addStretch(1)
         layout.addLayout(row)
+        #: Komunikat pobierania pod przyciskami: postęp, zapisana ścieżka, błąd sieci.
+        status = QLabel("")
+        status.setWordWrap(True)
+        status.setVisible(False)
+        theme.style_muted(status)
+        layout.addWidget(status)
         # „Edytuj…” i „Usuń” działają na zaznaczonym wierszu — bez zaznaczenia są nieaktywne z powodem.
         table.itemSelectionChanged.connect(self._refresh_list_buttons)
         if kind == "documents":
             self.documents_table = table
             self._documents_edit, self._documents_remove = edit, remove
+            self._documents_download, self._documents_map = download, None
+            self._documents_status = status
             add.clicked.connect(self._add_document)
             edit.clicked.connect(self._edit_document)
             remove.clicked.connect(self._remove_document)
+            download.clicked.connect(self._on_documents_download_clicked)
             table.itemDoubleClicked.connect(self._edit_document)
         else:
             self.drawings_table = table
             self._drawings_edit, self._drawings_remove = edit, remove
+            self._drawings_download, self._drawings_map = download, map_button
+            self._drawings_status = status
             add.clicked.connect(self._add_drawing)
             edit.clicked.connect(self._edit_drawing)
             remove.clicked.connect(self._remove_drawing)
+            download.clicked.connect(self._on_drawings_download_clicked)
+            map_button.clicked.connect(self._on_drawings_map_clicked)
             table.itemDoubleClicked.connect(self._edit_drawing)
         self._refresh_list_buttons()
         return page
@@ -1278,11 +1423,26 @@ class AppCreatorDialog(QDialog):
         self._log(f"Kreator APP: przestrzeń nazw z EZiUDP — {message}", "UWAGA")
 
     def new_version(self) -> None:
-        now = datetime.now(timezone.utc).replace(microsecond=0)
-        self.version_id.setText(version_id_now(now))
-        self.version_start.setDateTime(QDateTime.fromString(now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        # Północ dnia lokalnego (aby uniknąć przesunięcia daty w wersjiId)
+        local_now = datetime.now()
+        midnight_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # wersjaId jako lokalna północ (string)
+        self.version_id.setText(midnight_local.strftime("%Y%m%dT%H%M%S"))
+
+        # początek wersji w UTC (wymóg formatu pliku)
+        midnight_aware = midnight_local.astimezone()
+        utc_midnight = midnight_aware.astimezone(timezone.utc).replace(microsecond=0)
+
+        self.version_start.setDateTime(QDateTime.fromString(utc_midnight.strftime("%Y-%m-%dT%H:%M:%SZ"),
                                                             Qt.DateFormat.ISODate).toLocalTime())
         self.version_end.set_value(None)
+
+    def _on_version_end_changed(self, *args) -> None:
+        """Koniec wersji aktu wyznacza koniec obowiązywania (dzień wcześniej)."""
+        if self.version_end.check.isChecked():
+            end_date = self.version_end.edit.date()
+            self.effective_to.set_value(end_date.addDays(-1).toString("yyyy-MM-dd"))
 
     def _on_type_changed(self, *args) -> None:
         code = self.plan_type.currentData()
@@ -1829,6 +1989,11 @@ class AppCreatorDialog(QDialog):
             self._table_locked[widget] = (widget.isEnabled(),
                                           widget.isReadOnly() if hasattr(widget, "isReadOnly") else None,
                                           widget.editTriggers() if isinstance(widget, QAbstractItemView) else None)
+        # Pola z wartością liczbową, datą i godziną: „tylko do odczytu” nie wystarcza — strzałki
+        # i kalendarz nadal zmieniają wartość, więc pola są po prostu nieaktywne.
+        if isinstance(widget, QAbstractSpinBox):
+            widget.setEnabled(False)
+            return
         if hasattr(widget, "setReadOnly"):
             widget.setReadOnly(True)
             return
@@ -1859,6 +2024,136 @@ class AppCreatorDialog(QDialog):
         if unit is not None and plan_type and plan_type in allowed_act_types(unit, [plan_type]):
             return unit
         return None
+
+    # --- tryb „Szczegóły” (podgląd pliku bez edycji) --------------------------------------
+
+    def set_details_mode(self, enabled: bool = True) -> None:
+        """
+        Okno w trybie „Szczegóły”: te same zakładki co kreator, ale bez edycji i bez zapisu.
+
+        Znikają sekcje wczytywania pliku i przyciski zapisu, walidacji i dodawania wyniku oraz
+        zakładka *Strefy i regulacje* (to ustawienie kreatora, nie zawartość pliku). Formularz
+        blokowany jest tak jak w trybie tabel: pola tekstowe zostają czytelne (można kopiować
+        wartości), listy kodowe, daty i przyciski są nieaktywne, a tabele nie przyjmują edycji.
+        """
+        self._read_only = bool(enabled)
+        if not self._read_only:
+            return
+        self.setObjectName("GSMapaAppDetailsDialog")
+        self.setWindowTitle(self._details_title())
+        self.intro.setText(self.tr(
+            "Szczegóły pliku — dane tylko do odczytu. Nową wersję aktu przygotuj przez „Edytuj” "
+            "na liście plików."))
+        self.intro.setToolTip(self.tr(
+            "Zawartość pliku APP: akt, dokumenty i rysunki. Nic nie jest tu liczone ani zapisywane; "
+            "dwuklik na dokumencie albo rysunku pokazuje wszystkie jego pola."))
+        for widget in (self._update_box, self._template_box, self._output_label, self.output,
+                       self.btn_load, self.btn_save, self.btn_check, self.btn_generate,
+                       self.btn_validate, self.btn_add):
+            widget.setVisible(False)
+        if hasattr(self.tabs, "setTabVisible"):
+            self.tabs.setTabVisible(TAB_OBJECTS, False)
+        else:  # starsze Qt: ukryta strona chowa też swój przycisk zakładki
+            self._objects_page.setVisible(False)
+        self._documents_hint.setText(self.tr(
+            "Dokumenty formalne z pliku. Dwuklik na wierszu pokazuje wszystkie pola dokumentu "
+            "(tytuł, numer, organ, dziennik, łącza). „Pobierz” przy łączu zapisuje plik "
+            "w folderze pobrań wtyczki, a „Pobierz…” — w wybranym folderze."))
+        self._drawings_hint.setText(self.tr(
+            "Rysunki aktu z pliku. Dwuklik na wierszu pokazuje wszystkie pola rysunku "
+            "(łącze GeoTIFF, legendę, układ, skalę). „Pobierz” przy łączu zapisuje rysunek "
+            "na dysk, „Dodaj do mapy” wczytuje go do projektu."))
+        self.btn_generate.setDefault(False)
+        self._lock_forms()
+
+    def load_details(self, path: str) -> bool:
+        """
+        Pokazuje w oknie zawartość pliku bez zmiany jego wersji i bez możliwości edycji.
+
+        GML czytany jest odczytem aktu (:func:`core.app_update.read_act_source`, APP 1.0–3.0),
+        GeoPackage — odczytem wzorcowego pliku (:func:`services.app_source.read_template`).
+        Wartości list kodowych spoza listy wtyczki (np. ``status`` z APP 1.0) są dopisywane do pól,
+        żeby podgląd pokazywał treść pliku, a nie wartość domyślną.
+
+        :param path: plik ``.gml`` albo ``.gpkg`` z danymi APP.
+        :return: ``True``, gdy plik dał się odczytać.
+        """
+        target = Path(path)
+        if target.suffix.lower() == ".gml":
+            try:
+                source = read_act_source(str(target))
+            except (AppGmlError, OSError) as e:
+                self._details_failed(target, e)
+                return False
+            version = source.app_version
+        else:
+            from ..services.app_source import read_template
+
+            try:
+                source = read_template(str(target))
+            except OSError as e:
+                self._details_failed(target, e)
+                return False
+            version = None
+        if not source.act and not source.documents and not source.drawings:
+            self._details_failed(target, self.tr("brak aktu, dokumentów i rysunków"))
+            return False
+        self.set_details_mode(True)
+        self.set_state(file_draft(source))
+        for combo, code in ((self.plan_type, source.act.get("plan_type")),
+                            (self.level, source.act.get("level")), (self.status, source.act.get("status"))):
+            _show_code(combo, code)
+        self._details_name = target.name
+        self.setWindowTitle(self._details_title())
+        self.unit_label.setText(self._details_unit(source.act))
+        self.summary.setText(self._details_summary(version, source))
+        #: ``set_state`` zdejmuje blokadę identyfikatora — w podglądzie pola zostają zablokowane.
+        self._lock_forms()
+        self.tabs.setCurrentIndex(TAB_ACT)
+        self._log(f"Szczegóły APP: {target} — {version or 'GeoPackage'}")
+        for note in source.notes:
+            self._log(f"Szczegóły APP: {note}", "UWAGA")
+        return True
+
+    def _details_title(self) -> str:
+        """Tytuł okna podglądu z nazwą pliku."""
+        return (self.tr("Szczegóły pliku — {0}").format(self._details_name) if self._details_name
+                else self.tr("Szczegóły pliku"))
+
+    def _details_unit(self, act: dict) -> str:
+        """
+        Jednostka terytorialna aktu w podglądzie — z przestrzeni nazw pliku, a nie z panelu.
+
+        W kreatorze jednostka pochodzi z paska na górze panelu (i zawęża typy aktów). Podgląd
+        pokazuje jednostkę zapisaną w pliku, bo to ona jest treścią, którą się ogląda.
+        """
+        unit = self._unit_for(str(act.get("namespace") or ""), act.get("plan_type"))
+        if unit is not None:
+            return unit.label
+        return self.tr("jednostka spoza listy wtyczki — przestrzeń nazw z pliku")
+
+    def _details_summary(self, version: Optional[str], source) -> str:
+        """
+        Jedna linia opisu zawartości pliku.
+
+        W podglądzie nie ma listy uwag ani pliku wynikowego, więc miejsce pod formularzem zajmuje
+        to, ile czego w pliku jest (strefy i regulacje liczone z nagłówka pliku, bo ich zakładka
+        jest w podglądzie ukryta).
+        """
+        zones = sum(count for kind, count in (source.counts or {}).items() if kind in SPATIAL_KINDS)
+        parts = [self.tr("APP {0}").format(version)] if version else []
+        parts += [self.tr("dokumentów: {0}").format(len(source.documents)),
+                  self.tr("rysunków: {0}").format(len(source.drawings)),
+                  self.tr("stref i regulacji: {0}").format(zones)]
+        text = " · ".join(parts) + "."
+        notes = list(source.notes or [])
+        return text + (" " + " ".join(notes) if notes else "")
+
+    def _details_failed(self, path: Path, error) -> None:
+        """Komunikat o pliku, którego nie dało się pokazać (w oknie, bez modalnego błędu)."""
+        text = self.tr("Nie wczytano {0}: {1}").format(path.name, error)
+        self.summary.setText(text)
+        self._log(f"Szczegóły APP: {text}", "BŁĄD")
 
     def load_update_file(self, path: str, act_id: Optional[str] = None) -> bool:
         """
@@ -2039,10 +2334,13 @@ class AppCreatorDialog(QDialog):
         for value in self._documents:
             row = table.rowCount()
             table.insertRow(row)
+            links = [str(link).strip() for link in value.get("links") or [] if str(link or "").strip()]
+            # Kolumna „Łącze” to odnośnik „Pobierz” (adres jest podpowiedzią), nie tekst adresu.
             cells = (ROLE_LABELS.get(value.get("role"), value.get("role")), value.get("local_id"), value.get("title"),
-                     value.get("number") or "", value.get("date"))
+                     value.get("number") or "", value.get("date"), "")
             for column, text in enumerate(cells):
                 table.setItem(row, column, QTableWidgetItem(text or ""))
+            self._set_link_cell(table, "documents", row, _DOCUMENTS_LINK_COLUMN, links)
 
     def _fill_drawings(self) -> None:
         table = self.drawings_table
@@ -2050,9 +2348,46 @@ class AppCreatorDialog(QDialog):
         for value in self._drawings:
             row = table.rowCount()
             table.insertRow(row)
-            cells = (value.get("local_id"), value.get("title"), value.get("link"), f"1:{value.get('scale')}")
+            # Kolumna „Łącze” to odnośnik „Pobierz” (adres jest podpowiedzią), nie tekst adresu.
+            cells = (value.get("local_id"), value.get("title"), "", f"1:{value.get('scale')}")
             for column, text in enumerate(cells):
                 table.setItem(row, column, QTableWidgetItem(text or ""))
+            links = [str(value.get("link") or "").strip()]
+            self._set_link_cell(table, "drawings", row, _DRAWINGS_LINK_COLUMN, [link for link in links if link])
+
+    def _set_link_cell(self, table: QTableWidget, kind: str, row: int, column: int,
+                       links: List[str]) -> None:
+        """
+        Wstawia w komórkę „Łącze” odnośnik „Pobierz” (albo tekst mówiący, że łącza nie ma).
+
+        Odnośnik pobiera plik z adresów wiersza do folderu pobrań wtyczki — bez pytania
+        o katalog; cały adres (i katalog docelowy) jest w podpowiedzi, bo w kolumnie się nie mieści.
+
+        :param table: tabela dokumentów albo rysunków.
+        :param kind: ``documents`` albo ``drawings``.
+        :param row: numer wiersza, którego dotyczy odnośnik.
+        :param column: numer kolumny „Łącze”.
+        :param links: adresy plików z wiersza (także spoza ``http``/``https`` — filtr jest w pobieraniu).
+        """
+        if not any(is_web(link) for link in links):
+            item = table.item(row, column)
+            item.setText(self.tr("brak łącza"))
+            item.setToolTip(self.tr("Wiersz nie ma łącza http — nie ma czego pobrać."))
+            return
+        button = QToolButton()
+        button.setText(self.tr("Pobierz"))
+        button.setToolTip(self.tr("{0}\nZapisuje plik w folderze: {1}").format(
+            "\n".join(str(link).strip() for link in links), self._link_base_dir()))
+        theme.link_button(button, "download")
+        button.clicked.connect(lambda _checked=False, target=row: self.download_link(kind, target))
+        # Odnośnik wyrównany do lewej i tylko tak szeroki, jak tekst — kliknięcie w puste
+        # miejsce komórki nie pobiera pliku (zaznacza wiersz, jak w pozostałych kolumnach).
+        cell = QWidget()
+        layout = QHBoxLayout(cell)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.addWidget(button)
+        layout.addStretch(1)
+        table.setCellWidget(row, column, cell)
 
     def _document_defaults(self) -> dict:
         """Propozycje pól dokumentu z jednostki: organ, dziennik urzędowy i podpis źródła."""
@@ -2103,6 +2438,7 @@ class AppCreatorDialog(QDialog):
 
     def _refresh_list_buttons(self) -> None:
         """„Edytuj…” i „Usuń” aktywne tylko przy zaznaczonym wierszu; inaczej podpowiedź z powodem."""
+        self._refresh_link_colors()
         for table, edit, remove, name in ((getattr(self, "documents_table", None), getattr(self, "_documents_edit", None),
                                            getattr(self, "_documents_remove", None), self.tr("dokument")),
                                           (getattr(self, "drawings_table", None), getattr(self, "_drawings_edit", None),
@@ -2110,18 +2446,267 @@ class AppCreatorDialog(QDialog):
             if table is None or edit is None or remove is None:
                 continue
             selected = table.currentRow() >= 0 and bool(table.selectedItems())
-            if self._table_mode:
-                # Tryb tabel: dokumenty i rysunki zmienia się w pliku, więc te przyciski są nieaktywne.
+            if self._read_only or self._table_mode:
+                # Podgląd i tryb tabel: dokumenty i rysunki zmienia się poza tym oknem.
                 for button in (edit, remove):
                     button.setEnabled(False)
-                    button.setToolTip(self.tr("Tryb tabel: zmień dane w pliku GeoPackage "
-                                              "i kliknij „Odśwież z pliku”"))
+                    button.setToolTip(self.tr("Podgląd: dane tylko do odczytu") if self._read_only
+                                      else self.tr("Tryb tabel: zmień dane w pliku GeoPackage "
+                                                   "i kliknij „Odśwież z pliku”"))
                 continue
             for button in (edit, remove):
                 button.setEnabled(selected)
                 button.setToolTip("" if selected else self.tr("Zaznacz {0} na liście").format(name))
+        # „Pobierz…” i „Dodaj do mapy” tylko czytają plik z łącza — działają też w podglądzie i trybie tabel.
+        for kind, table, download, map_button, name in (
+                ("documents", getattr(self, "documents_table", None), getattr(self, "_documents_download", None),
+                 getattr(self, "_documents_map", None), self.tr("dokument")),
+                ("drawings", getattr(self, "drawings_table", None), getattr(self, "_drawings_download", None),
+                 getattr(self, "_drawings_map", None), self.tr("rysunek"))):
+            if download is None:
+                continue
+            row = table.currentRow() if table is not None and bool(table.selectedItems()) else -1
+            ready = bool(self._row_links(kind, row))
+            reason = "" if ready else (
+                self.tr("Zaznacz {0} na liście").format(name) if row < 0
+                else self.tr("Wiersz nie ma łącza http — nie ma czego pobrać"))
+            for button, tooltip in ((download, self.tr("Zapisz plik z łącza zaznaczonego wiersza w wybranym folderze")),
+                                    (map_button, self.tr("Pobierz rysunek (GeoTIFF) i wczytaj go do projektu "
+                                                         "jako warstwę rastrową"))):
+                if button is None:
+                    continue
+                button.setEnabled(ready)
+                button.setToolTip(reason or tooltip)
+
+    def _refresh_link_colors(self) -> None:
+        """
+        Odnośniki „Pobierz” w zaznaczonych wierszach dostają kolor tekstu zaznaczenia.
+
+        Komórka z odnośnikiem to widżet, więc arkusz stylów tabeli (``item:selected``) go nie
+        przebarwia — na tle akcentu odnośnik w kolorze odnośnika był nieczytelny.
+        """
+        for table, column in ((getattr(self, "documents_table", None), _DOCUMENTS_LINK_COLUMN),
+                              (getattr(self, "drawings_table", None), _DRAWINGS_LINK_COLUMN)):
+            if table is None:
+                continue
+            selected = {item.row() for item in table.selectedItems()}
+            for row in range(table.rowCount()):
+                cell = table.cellWidget(row, column)
+                button = cell.findChild(QToolButton) if cell is not None else None
+                if button is not None:
+                    theme.set_link_selected(button, row in selected)
+
+    def _row_links(self, kind: str, row: int) -> List[str]:
+        """
+        Adresy plików z wiersza tabeli — tylko ``http``/``https`` (dokument może mieć kilka łączy).
+
+        :param kind: ``documents`` albo ``drawings``.
+        :param row: numer wiersza (``-1`` = brak zaznaczenia).
+        :return: lista adresów do pobrania (pusta, gdy wiersz nie ma łącza do pliku).
+        """
+        values = self._documents if kind == "documents" else self._drawings
+        if not (0 <= row < len(values)):
+            return []
+        value = values[row]
+        links = value.get("links") if kind == "documents" else [value.get("link")]
+        return [str(link).strip() for link in links or [] if is_web(link)]
+
+    # --- pobieranie plików z łączy -----------------------------------------------------
+
+    def _link_base_dir(self) -> str:
+        """Katalog bazowy pobrań: wybrany w oknie „Informacja o planie”, a bez wyboru — cache QGIS."""
+        base = getattr(self._config, "download_dir", "") if self._config is not None else ""
+        if not base:
+            base = str(Path(QgsApplication.qgisSettingsDirPath()) / "cache" / "gs_mapa")
+        return base
+
+    def _choose_download_dir(self, title: str) -> str:
+        """Pyta o folder na pobierane pliki; wybór zostaje zapamiętany w ustawieniach wtyczki."""
+        folder = QFileDialog.getExistingDirectory(self, title, self._link_base_dir())
+        if folder and self._config is not None:
+            self._config.download_dir = folder
+        return folder or ""
+
+    def _link_downloads(self):
+        """Pobieranie plików z łączy (tworzone i podłączane przy pierwszym użyciu)."""
+        if self._link_downloader is None:
+            from ..services.download import FileDownloader
+
+            self._link_downloader = FileDownloader()
+            self._link_downloader.setParent(self)
+            self._link_downloader.progress.connect(self._on_link_progress)
+            self._link_downloader.finished.connect(self._on_link_downloaded)
+            self._link_downloader.failed.connect(self._on_link_failed)
+        return self._link_downloader
+
+    def _link_status(self, kind: str, text: str, warning: bool = False) -> None:
+        """Komunikat pod tabelą dokumentów albo rysunków (pusty tekst ukrywa etykietę)."""
+        label = getattr(self, f"_{kind}_status", None)
+        if label is None:
+            return
+        label.setText(text)
+        theme.set_text_role(label, "warn" if warning else "muted")
+        label.setVisible(bool(text))
+
+    def download_link(self, kind: str, row: int) -> bool:
+        """
+        Pobiera plik z łącza wiersza — to robi odnośnik „Pobierz” w kolumnie „Łącze”.
+
+        Katalog docelowy jest ten sam, co domyślny dla „Pobierz…” (``config.download_dir``,
+        a bez wyboru folderu — cache QGIS), więc odnośnik nie zatrzymuje pracy oknem wyboru
+        katalogu; ścieżkę zapisanego pliku pokazuje komunikat pod tabelą.
+
+        :param kind: ``documents`` albo ``drawings``.
+        :param row: numer wiersza w tabeli.
+        :return: ``True``, gdy pobieranie się rozpoczęło.
+        """
+        folder = self._link_base_dir()
+        if kind == "drawings":
+            return self.download_drawing(row, folder)
+        return self.download_document(row, folder)
+
+    def download_document(self, row: int, folder: str) -> bool:
+        """
+        Pobiera łącza dokumentu z wiersza tabeli do wskazanego folderu.
+
+        :param row: numer wiersza w tabeli dokumentów.
+        :param folder: katalog docelowy.
+        :return: ``True``, gdy pobieranie się rozpoczęło.
+        """
+        if not folder:
+            return False
+        links = self._row_links("documents", row)
+        value = self._documents[row] if 0 <= row < len(self._documents) else {}
+        name = str(value.get("title") or value.get("local_id") or self.tr("dokument"))
+        if not links:
+            self._link_status("documents", self.tr("Dokument {0} nie ma łącza http — nie ma czego pobrać.")
+                              .format(name), warning=True)
+            return False
+        self._log(f"Kreator APP: pobieranie dokumentu {name} ({len(links)} łączy) do {folder}")
+        for url in links:
+            self._pending_links[url] = ("documents", name, False)
+            self._link_status("documents", self.tr("Pobieranie {0}…").format(name))
+            self._link_downloads().download(url, folder)
+        return True
+
+    def download_drawing(self, row: int, folder: str) -> bool:
+        """
+        Pobiera rysunek (GeoTIFF) z wiersza tabeli do wskazanego folderu.
+
+        :param row: numer wiersza w tabeli rysunków.
+        :param folder: katalog docelowy.
+        :return: ``True``, gdy pobieranie się rozpoczęło.
+        """
+        if not folder:
+            return False
+        links = self._row_links("drawings", row)
+        value = self._drawings[row] if 0 <= row < len(self._drawings) else {}
+        name = str(value.get("title") or value.get("local_id") or self.tr("rysunek"))
+        if not links:
+            self._link_status("drawings", self.tr("Rysunek {0} nie ma łącza http — nie ma czego pobrać.")
+                              .format(name), warning=True)
+            return False
+        self._log(f"Kreator APP: pobieranie rysunku {name} do {folder}")
+        for url in links:
+            self._pending_links[url] = ("drawings", name, False)
+            self._link_status("drawings", self.tr("Pobieranie {0}…").format(name))
+            self._link_downloads().download(url, folder)
+        return True
+
+    def drawing_to_map(self, row: int) -> bool:
+        """
+        Pobiera rysunek z wiersza (jeśli nie ma go jeszcze na dysku) i wczytuje go do projektu.
+
+        Plik trafia do ``<katalog pobrań>/rysunki`` — bez pytania o folder, bo to ten sam wybór,
+        co przy „Pobierz…”; istniejący plik nie jest pobierany ponownie.
+
+        :param row: numer wiersza w tabeli rysunków.
+        :return: ``True``, gdy pobieranie się rozpoczęło.
+        """
+        links = self._row_links("drawings", row)
+        value = self._drawings[row] if 0 <= row < len(self._drawings) else {}
+        name = str(value.get("title") or value.get("local_id") or self.tr("rysunek"))
+        if not links:
+            self._link_status("drawings", self.tr("Rysunek {0} nie ma łącza http — nie ma czego wczytać.")
+                              .format(name), warning=True)
+            return False
+        folder = str(Path(self._link_base_dir()) / "rysunki")
+        self._log(f"Kreator APP: rysunek {name} do mapy — pobieranie do {folder}")
+        for url in links:
+            self._pending_links[url] = ("drawings", name, True)
+            self._link_status("drawings", self.tr("Pobieranie {0} do mapy…").format(name))
+            self._link_downloads().download(url, folder)
+        return True
+
+    def _on_documents_download_clicked(self) -> None:
+        folder = self._choose_download_dir(self.tr("Folder na pobrane dokumenty"))
+        if folder:
+            self.download_document(self.documents_table.currentRow(), folder)
+
+    def _on_drawings_download_clicked(self) -> None:
+        folder = self._choose_download_dir(self.tr("Folder na pobrane rysunki"))
+        if folder:
+            self.download_drawing(self.drawings_table.currentRow(), folder)
+
+    def _on_drawings_map_clicked(self) -> None:
+        self.drawing_to_map(self.drawings_table.currentRow())
+
+    def _on_link_progress(self, url: str, received: int, total: int) -> None:
+        pending = self._pending_links.get(url)
+        if pending is None:
+            return
+        kind, name, _ = pending
+        done = _format_size(received) or "0 kB"
+        of = f" / {_format_size(total)}" if total > 0 else ""
+        self._link_status(kind, self.tr("Pobieranie {0}: {1}{2}").format(name, done, of))
+
+    def _on_link_downloaded(self, url: str, path: str) -> None:
+        pending = self._pending_links.pop(url, None)
+        if pending is None:
+            return
+        kind, name, to_map = pending
+        if to_map:
+            layer = self._add_drawing_layer(path, name)
+            if layer is None:
+                self._link_status(kind, self.tr("Nie udało się wczytać rysunku {0} z pliku {1}.")
+                                  .format(name, path), warning=True)
+                self._log(f"Kreator APP: nie wczytano rysunku {path}", "UWAGA")
+                return
+            self._link_status(kind, self.tr("Dodano do mapy: {0} — plik: {1}").format(name, path))
+        else:
+            self._link_status(kind, self.tr("Pobrano: {0}").format(path))
+        self._log(f"Kreator APP: plik z łącza {url} — {path}")
+
+    def _on_link_failed(self, url: str, message: str) -> None:
+        pending = self._pending_links.pop(url, None)
+        if pending is None:
+            return
+        kind, name, _ = pending
+        self._link_status(kind, self.tr("Nie pobrano {0}: {1}").format(name, message), warning=True)
+        self._log(f"Kreator APP: nie pobrano {url} — {message}", "UWAGA")
+
+    def _add_drawing_layer(self, path: str, name: str):
+        """
+        Wczytuje pobrany rysunek jako warstwę rastrową projektu (resampling biliniowy jak w planie).
+
+        :param path: plik GeoTIFF na dysku.
+        :param name: nazwa warstwy w projekcie.
+        :return: dodana warstwa albo ``None``, gdy plik nie jest rastrem z georeferencją.
+        """
+        from qgis.core import QgsRasterLayer
+
+        from .plan_info import apply_drawing_resampling
+
+        layer = QgsRasterLayer(path, name or Path(path).stem, "gdal")
+        if not layer.isValid():
+            return None
+        apply_drawing_resampling(layer)
+        QgsProject.instance().addMapLayer(layer)
+        return layer
 
     def _add_document(self) -> None:
+        if self._read_only:
+            return
         default = {"role": "uchwala" if not self._documents else "dokument",
                    "local_id": f"D{len(self._documents) + 1}"}
         dialog = DocumentDialog(self.codes, default, self, defaults=self._document_defaults())
@@ -2129,16 +2714,20 @@ class AppCreatorDialog(QDialog):
             self.add_document(dialog.value())
 
     def _edit_document(self, *args) -> None:
+        """Formularz zaznaczonego dokumentu; w podglądzie („Szczegóły”) — tylko do odczytu."""
         row = self.documents_table.currentRow()
         if 0 <= row < len(self._documents):
             dialog = DocumentDialog(self.codes, self._documents[row], self,
-                                    defaults=self._document_defaults())
-            if dialog.exec():
+                                    defaults=None if self._read_only else self._document_defaults(),
+                                    read_only=self._read_only)
+            if dialog.exec() and not self._read_only:
                 self._documents[row] = dialog.value()
                 self._fill_documents()
                 self._sync_effective_from()
 
     def _remove_document(self) -> None:
+        if self._read_only:
+            return
         row = self.documents_table.currentRow()
         if 0 <= row < len(self._documents):
             del self._documents[row]
@@ -2146,19 +2735,24 @@ class AppCreatorDialog(QDialog):
             self._sync_effective_from()
 
     def _add_drawing(self) -> None:
+        if self._read_only:
+            return
         dialog = DrawingDialog({"local_id": f"R{len(self._drawings) + 1}"}, self)
         if dialog.exec():
             self.add_drawing(dialog.value())
 
     def _edit_drawing(self, *args) -> None:
+        """Formularz zaznaczonego rysunku; w podglądzie („Szczegóły”) — tylko do odczytu."""
         row = self.drawings_table.currentRow()
         if 0 <= row < len(self._drawings):
-            dialog = DrawingDialog(self._drawings[row], self)
-            if dialog.exec():
+            dialog = DrawingDialog(self._drawings[row], self, read_only=self._read_only)
+            if dialog.exec() and not self._read_only:
                 self._drawings[row] = dialog.value()
                 self._fill_drawings()
 
     def _remove_drawing(self) -> None:
+        if self._read_only:
+            return
         row = self.drawings_table.currentRow()
         if 0 <= row < len(self._drawings):
             del self._drawings[row]

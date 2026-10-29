@@ -92,7 +92,15 @@ class SetAct:
     published: bool = False
     #: Ten sam akt jest w Rejestrze, ale w innej wersji (nowa wersja albo nowsza publikacja).
     published_version: str = ""
+    #: Czy stan publikacji jest znany — ``False``, gdy aktów jednostki nie dało się sprawdzić
+    #: w Rejestrze (brak indeksu albo połączenia). Brak klucza nie znaczy wtedy „spoza Rejestru”.
+    registry_checked: bool = True
     error: str = ""
+
+    @property
+    def jpt(self) -> str:
+        """Kod jednostki z przestrzeni nazw (``PL.ZIPPZP.2500/026501-MPZP`` → ``026501``)."""
+        return namespace_jpt(self.namespace)
 
     @property
     def objects(self) -> int:
@@ -104,8 +112,8 @@ class SetAct:
 
     @property
     def editable(self) -> bool:
-        """Czy wolno jeszcze zmieniać identyfikatory (akt nie jest opublikowany)."""
-        return not self.error and not self.published
+        """Czy wolno zmieniać identyfikatory: akt na pewno nie jest opublikowany w Rejestrze."""
+        return not self.error and not self.published and self.registry_checked
 
 
 @dataclass
@@ -118,6 +126,9 @@ class SetReport:
     seconds: float = 0.0
     #: Pliki pominięte (nie GML) — informacyjnie, gdy katalog ma inne dane.
     skipped: List[str] = field(default_factory=list)
+    #: Klucze aktów opublikowanych ustalone w czasie analizy (opisy aktów z Rejestru) —
+    #: okno dopisuje je do swoich, żeby kolejna analiza nie pytała sieci drugi raz.
+    resolved: Dict[Tuple[str, str, str], str] = field(default_factory=dict)
 
     @property
     def namespaces(self) -> List[str]:
@@ -135,11 +146,18 @@ class SetReport:
             "namespaces": len(self.namespaces),
             "published": len(self.published),
             "editable": len([act for act in self.acts if act.editable]),
+            "unchecked": len([act for act in self.acts if not act.error and not act.registry_checked]),
             "unreadable": len([act for act in self.acts if act.error]),
             ERROR: len([f for f in self.findings if f.severity == ERROR]),
             WARNING: len([f for f in self.findings if f.severity == WARNING]),
             INFO: len([f for f in self.findings if f.severity == INFO]),
         }
+
+
+def namespace_jpt(namespace: str) -> str:
+    """Kod jednostki (``terc`` indeksu) z przestrzeni nazw; pusty tekst, gdy przestrzeń jest nietypowa."""
+    match = re.match(r"^PL\.ZIPPZP\.\d+/(\d{2,7})-[A-Za-z]+$", str(namespace or "").strip())
+    return match.group(1) if match else ""
 
 
 def published_key(url: str) -> Optional[Tuple[str, str, str]]:
@@ -193,12 +211,15 @@ def _document_label(document: dict) -> str:
 
 def scan(folder, published: Optional[Dict[Tuple[str, str, str], str]] = None,
          progress: Optional[Callable[[float, str], None]] = None,
-         is_canceled: Optional[Callable[[], bool]] = None) -> SetReport:
+         is_canceled: Optional[Callable[[], bool]] = None,
+         checked_units: Optional[Iterable[str]] = None) -> SetReport:
     """
     Analizuje wszystkie pliki GML w katalogu jako jeden zbiór APP.
 
     :param folder: katalog z aktami (przeszukiwany także w podkatalogach).
     :param published: klucze aktów opublikowanych (:func:`published_keys`); ``None`` = nie sprawdzaj.
+    :param checked_units: jednostki (``terc``), których akty sprawdzono w Rejestrze — akt innej
+        jednostki ma stan publikacji „nie sprawdzono”; ``None`` = wszystkie uznane za sprawdzone.
     :param progress: ``callable(0–100, opis)``.
     :param is_canceled: ``callable() -> bool`` — przerwanie analizy.
     :return: raport zbioru (także przy plikach nieczytelnych — wtedy z ustaleniem błędu).
@@ -239,7 +260,6 @@ def scan(folder, published: Optional[Dict[Tuple[str, str, str], str]] = None,
                      title=str(source.act.get("title") or ""),
                      counts=dict(source.counts))
         report.acts.append(act)
-        _publication(act, published, report)
         _occurrence(occurrences, by_content, act, act.namespace,
                     "AktPlanowaniaPrzestrzennego", act.local_id, _file_signature(source), role="",
                     label=(act.title or act.local_id)[:80])
@@ -262,13 +282,7 @@ def scan(folder, published: Optional[Dict[Tuple[str, str, str], str]] = None,
                         label=obj.designation or obj.identity.local_id)
 
     _identity_findings(occurrences, by_content, report)
-    if report.published:
-        listed = ", ".join(act.name for act in report.published[:5])
-        if len(report.published) > 5:
-            listed += "…"
-        report.findings.append(SetFinding(
-            INFO, f"{len(report.published)} aktów jest już opublikowanych w Rejestrze ({listed}) — ich "
-                  f"identyfikatorów nie zmieniaj; zmiana treści wymaga nowej wersji obiektu."))
+    apply_publication(report, published, checked_units)
     if len(report.namespaces) > 1:
         report.findings.append(SetFinding(
             INFO, "Katalog zawiera {0} zbiory: {1}. Identyfikatory sprawdzane są osobno w każdym "
@@ -276,6 +290,50 @@ def scan(folder, published: Optional[Dict[Tuple[str, str, str], str]] = None,
     report.seconds = time.time() - started
     if progress is not None:
         progress(100.0, "gotowe")
+    return report
+
+
+#: Reguła ustaleń o publikacji — pozwala je przeliczyć bez ponownego czytania plików.
+PUBLICATION_RULE = "ZBIÓR-REJESTR"
+
+
+def apply_publication(report: SetReport, published: Optional[Dict[Tuple[str, str, str], str]] = None,
+                      checked_units: Optional[Iterable[str]] = None) -> SetReport:
+    """
+    Stan publikacji aktów raportu (opublikowany / nowa wersja / spoza Rejestru / nie sprawdzono).
+
+    Można wołać wielokrotnie — np. po dociągnięciu kluczy z opisów aktów Rejestru — bez ponownego
+    czytania plików: poprzednie ustalenia o publikacji są zastępowane.
+
+    :param published: klucze aktów opublikowanych (:func:`published_keys`).
+    :param checked_units: jednostki sprawdzone w Rejestrze (``None`` = wszystkie).
+    """
+    published = published or {}
+    checked = None if checked_units is None else {str(unit) for unit in checked_units}
+    report.findings = [finding for finding in report.findings if finding.rule != PUBLICATION_RULE]
+    for act in report.acts:
+        act.published = False
+        act.published_version = ""
+        act.registry_checked = True
+        if act.error:
+            continue
+        _publication(act, published, report)
+        if not act.published and checked is not None and act.jpt not in checked:
+            act.registry_checked = False
+    if report.published:
+        listed = ", ".join(act.name for act in report.published[:5])
+        if len(report.published) > 5:
+            listed += "…"
+        report.findings.append(SetFinding(
+            INFO, f"{len(report.published)} aktów jest już opublikowanych w Rejestrze ({listed}) — ich "
+                  f"identyfikatorów nie zmieniaj; zmiana treści wymaga nowej wersji obiektu.",
+            rule=PUBLICATION_RULE))
+    unchecked = [act for act in report.acts if not act.error and not act.registry_checked]
+    if unchecked:
+        report.findings.append(SetFinding(
+            WARNING, f"Nie udało się sprawdzić w Rejestrze {len(unchecked)} aktów (brak indeksu aktów albo "
+                     f"połączenia) — ich stan publikacji jest nieznany, więc identyfikatorów nie można zmieniać. "
+                     f"Odśwież indeks i przeanalizuj katalog ponownie.", rule=PUBLICATION_RULE))
     return report
 
 
@@ -293,7 +351,8 @@ def _publication(act: SetAct, published: Dict[Tuple[str, str, str], str], report
         report.findings.append(SetFinding(
             WARNING, f"{act.name}: akt {act.local_id} jest opublikowany w wersji {act.published_version}, "
                      f"a plik ma wersję {act.version_id or '(brak)'} — to nowa wersja: poprzednia musi mieć "
-                     f"domknięcie (koniecWersjiObiektu, obowiazujeDo).", act.path, act.local_id))
+                     f"domknięcie (koniecWersjiObiektu, obowiazujeDo).", act.path, act.local_id,
+            rule=PUBLICATION_RULE))
 
 
 def _occurrence(occurrences, by_content, act: SetAct, namespace: str, kind: str, local_id: str,
@@ -351,15 +410,30 @@ def write_csv(report: SetReport, path) -> None:
     with open(path, "w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle, delimiter=";")
         writer.writerow(["rodzaj", "poziom", "akt_plik", "przestrzen_nazw", "lokalny_id",
-                         "akt_wersja", "publikacja", "komunikat"])
+                         "akt_wersja", "app_wersja", "publikacja", "komunikat"])
         for act in report.acts:
             writer.writerow(["akt", "błąd" if act.error else "informacja", act.name, act.namespace,
-                             act.local_id, act.version_id,
+                             act.local_id, act.version_id, act.app_version or "",
                              "opublikowany" if act.published else "oczekuje", act.error or act.title])
         for finding in report.findings:
             writer.writerow(["ustalenie", SEVERITY_LABELS.get(finding.severity, finding.severity),
                              Path(finding.file).name if finding.file else "", "", finding.object_id,
-                             "", "", finding.message])
+                             "", "", "", finding.message])
+
+
+def version_counts(acts: Iterable) -> Dict[str, int]:
+    """
+    Liczba aktów w każdej wersji schematu APP (``3.0``, ``2.0``…; ``""`` — wersja nieustalona).
+
+    :param acts: akty raportu (:class:`SetAct`); akty nieczytelne są pomijane.
+    """
+    counts: Dict[str, int] = {}
+    for act in acts:
+        if getattr(act, "error", ""):
+            continue
+        version = str(getattr(act, "app_version", None) or "")
+        counts[version] = counts.get(version, 0) + 1
+    return counts
 
 
 def acts_of_unit(entries: Iterable, jpt: Optional[str]) -> List:

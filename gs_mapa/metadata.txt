@@ -10,7 +10,7 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.1.4
+version=0.1.5
 author=Grzegorz Sieńko
 email=gsienko@gis-serwer.pl
 
@@ -20,7 +20,19 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.1.4 - Cutting a new plan area and whole-set checks
+changelog=0.1.5 - File preview, whole-set conversion and document downloads
+    - "Szczegóły": an APP file opened read-only from the recent-files list, with the act,
+      document and drawing details and no editing.
+    - Documents and drawings: a "Pobierz…" link instead of a raw address, download to a
+      folder and adding the file to the map.
+    - Whole set: APP version column and bulk conversion to APP 3.0; an act already in the
+      Register is converted as a new version (new wersjaId, previous file kept as .bak).
+    - Whole set: all acts added to the map, bulk identifier changes for acts outside the
+      Register, publication state read from the Register, new window layout.
+    - Creator: object version taken from local midnight and "obowiązuje do" derived from
+      the end of the version.
+    - Basemaps: vector only (OpenStreetMap, BDOT10k) — the raster path is gone.
+    0.1.4 - Cutting a new plan area and whole-set checks
     - "Wytnij obszar nowego planu…" for local plans: a new act boundary from a new plan
       GML file or a project layer, GeoTIFF drawings cropped to the new boundary, and
       drawings retired or re-versioned with a note about the cut.

@@ -2,12 +2,14 @@
 
 import logging
 
-from qgis.PyQt.QtCore import QCoreApplication, QSettings, QSize, Qt, QTimer
+from qgis.PyQt.QtCore import QCoreApplication, QSettings, QSize, Qt
 from qgis.PyQt.QtGui import QAction
 from qgis.PyQt.QtWidgets import QToolButton
 from qgis.core import Qgis, QgsMessageLog
 
 from .core.config import GSMapaConfig
+from .services.act_index import ActIndexService
+from .services.acts import ActService
 from .services.basemaps import BasemapService
 from .services.layers import LayerService
 from .services.manifest import ManifestService
@@ -62,6 +64,10 @@ class GSMapaPlugin:
         self.ogr_reader = OGRReader()
         self.layer_service = LayerService(self.ogr_reader)
         self.basemap_service = BasemapService()
+        #: Opisy aktów (pliki ``akty/{act_id}.json``).
+        self.act_service = ActService()
+        #: Indeks aktów — jedno pobranie na build.
+        self.act_index_service = ActIndexService()
 
     def initGui(self) -> None:  # noqa: N802 - nazwa z API QGIS
         """Pasek narzędzi, menu wtyczki i suwak przezroczystości."""
@@ -112,7 +118,6 @@ class GSMapaPlugin:
             for item in (action, info, self.basemap_menu.menuAction()):
                 self.iface.addPluginToMenu(MENU_TITLE, item)
 
-            QTimer.singleShot(0, self.basemap_service.fetch_versions)
             QgsMessageLog.logMessage(self.tr("Wtyczka GS Mapa zainicjalizowana."), "GS Mapa", Qgis.MessageLevel.Info)
             logger.info("initGui zakończone sukcesem.")
         except Exception as e:
@@ -123,7 +128,8 @@ class GSMapaPlugin:
         logger.info("Wywoływanie unload().")
         self._deactivate_plan_info()
         if self.basemap_menu is not None:
-            for item in (self.action, self.plan_info_action, self.basemap_menu.menuAction()):
+            for item in (self.action, self.plan_info_action,
+                         self.basemap_menu.menuAction()):
                 if item is not None:
                     self.iface.removePluginMenu(MENU_TITLE, item)
             self.basemap_menu.shutdown()
@@ -132,7 +138,8 @@ class GSMapaPlugin:
             self.toolbar.hide()
             self.toolbar.deleteLater()
             self.toolbar = None
-        self.action = self.plan_info_action = self.basemap_menu = self.basemap_button = None
+        self.action = self.plan_info_action = None
+        self.basemap_menu = self.basemap_button = None
 
         transparency_widget.unregister()
 
@@ -150,7 +157,9 @@ class GSMapaPlugin:
         """Panel (tworzony raz); nowy panel trafia do interfejsu QGIS."""
         if self.dock is None:
             self.dock = GSMapaDock(self.iface, self.config, self.manifest_service, self.layer_service,
-                                   self.ogr_reader, basemap_service=self.basemap_service)
+                                   self.ogr_reader, basemap_service=self.basemap_service,
+                                   act_service=self.act_service,
+                                   act_index_service=self.act_index_service)
             self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
             self.dock.visibilityChanged.connect(self._on_dock_visibility)
         return self.dock

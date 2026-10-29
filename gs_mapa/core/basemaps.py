@@ -1,12 +1,10 @@
 """Katalog map podkładowych GS Mapa (serwer kafli gs-mapa-engine, domena gs-mapa.cloud).
 
-Każdy podkład jest dostępny w dwóch postaciach:
-
-* **raster** — kafle PNG renderowane na serwerze (MapLibre Native) z oryginalnym stylem;
-  wyglądają tak samo jak mapa w przeglądarce. Adres zawiera wersję stylu, którą podaje
-  ``/raster/metadata`` — zmienia się przy każdym wdrożeniu nowego stylu (unieważnia cache).
-* **wektor** — kafle MVT ze stylem MapLibre konwertowanym przez QGIS. Dają dostęp do obiektów
-  i atrybutów, ale konwersja stylu jest przybliżona (np. ikony ze sprite'ów).
+Podkłady są dostępne wyłącznie jako **wektor** — kafle MVT ze stylem MapLibre
+konwertowanym przez QGIS. Dają dostęp do obiektów i atrybutów, ale konwersja
+stylu jest przybliżona (np. ikony ze sprite'ów), więc wygląd może różnić się
+od mapy w przeglądarce. Warstwy rastrowe (kafle PNG renderowane serwerowo)
+zostały z wtyczki wycofane.
 """
 
 from dataclasses import dataclass, field
@@ -33,24 +31,11 @@ class Basemap:
     attribution: str
     #: Adres bazowy serwera podkładu, np. ``https://osm.gs-mapa.cloud``.
     base_url: str
-    #: Wersja stylu rastra używana, gdy ``/raster/metadata`` jest niedostępne.
-    raster_fallback_version: str
-    raster_zmin: int
-    raster_zmax: int
     #: Szablon kafli wektorowych.
     vector_tiles: str
     vector_zmin: int
     vector_zmax: int
     vector_styles: List[VectorStyle] = field(default_factory=list)
-
-    @property
-    def metadata_url(self) -> str:
-        """Adres z bieżącą wersją stylu rastra (``{"style": "v21-r3", ...}``)."""
-        return f"{self.base_url}/raster/metadata"
-
-    def raster_tiles(self, version: Optional[str] = None) -> str:
-        """Szablon kafli rastrowych PNG dla wersji stylu."""
-        return f"{self.base_url}/raster/{version or self.raster_fallback_version}/{{z}}/{{x}}/{{y}}.png"
 
     def vector_style(self, style_id: Optional[str] = None) -> Optional[VectorStyle]:
         """Styl wektorowy o danym id (domyślnie pierwszy)."""
@@ -71,9 +56,6 @@ BASEMAPS: List[Basemap] = [
         description="Mapa ogólna Polski z OpenStreetMap (styl OSM Bright).",
         attribution="© autorzy OpenStreetMap (ODbL)",
         base_url=_OSM,
-        raster_fallback_version="osm-bright-v1.11-r1",
-        raster_zmin=0,
-        raster_zmax=19,
         vector_tiles=f"{_OSM}/{{z}}/{{x}}/{{y}}.pbf",
         vector_zmin=0,
         vector_zmax=14,
@@ -90,9 +72,6 @@ BASEMAPS: List[Basemap] = [
         description="Baza Danych Obiektów Topograficznych — szczegółowa mapa topograficzna Polski.",
         attribution="BDOT10k © Główny Urząd Geodezji i Kartografii",
         base_url=_BDOT,
-        raster_fallback_version="v21-r3",
-        raster_zmin=4,
-        raster_zmax=19,
         vector_tiles=f"{_BDOT}/{{z}}/{{x}}/{{y}}",
         vector_zmin=4,
         vector_zmax=15,

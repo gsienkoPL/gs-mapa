@@ -475,6 +475,8 @@ QToolButton[gsmapa_link="true"] {
     background: transparent; border: none; padding: 0; color: $link;
 }
 QToolButton[gsmapa_link="true"]:hover { text-decoration: underline; background: transparent; }
+/* Odnośnik w zaznaczonym wierszu tabeli leży na tle akcentu — kolor tekstu zaznaczenia. */
+QToolButton[gsmapa_link="true"][gsmapa_on_selection="true"] { color: $accent_text; }
 QToolButton::menu-indicator { image: none; width: 0; }
 
 QTabWidget::pane { border: none; border-top: 1px solid $border; top: -1px; background: $window; }
@@ -790,13 +792,36 @@ def primary(button):
 
 
 def _apply_link(button) -> None:
+    # Odnośnik w zaznaczonym wierszu tabeli leży na tle akcentu — kolor odnośnika tam znika.
+    role = "HighlightedText" if button.property("gsmapa_on_selection") else "link"
+    color = color_of(role)
     pal = QPalette()
-    pal.setColor(QPalette.ColorRole.ButtonText, link())
-    pal.setColor(QPalette.ColorRole.WindowText, link())
+    pal.setColor(QPalette.ColorRole.ButtonText, color)
+    pal.setColor(QPalette.ColorRole.WindowText, color)
     button.setPalette(pal)
     name = button.property("gsmapa_icon")
     if name:
-        button.setIcon(icon(name, "link"))
+        button.setIcon(icon(name, role))
+
+
+def set_link_selected(button, selected: bool) -> None:
+    """
+    Kolor odnośnika na tle zaznaczenia wiersza (``HighlightedText``, w motywie wtyczki biały).
+
+    Odnośnik w komórce tabeli jest widżetem, więc nie dostaje koloru tekstu z selektora
+    ``QAbstractItemView::item:selected``; bez tej zmiany zostaje w kolorze odnośnika i na tle
+    akcentu staje się nieczytelny. Znacznik jest właściwością przycisku, więc zmiana motywu
+    odświeża kolor sama (:func:`register`).
+
+    :param button: przycisk odnośnika (:func:`link_button`).
+    :param selected: czy wiersz, w którym leży odnośnik, jest zaznaczony.
+    """
+    if bool(button.property("gsmapa_on_selection")) == bool(selected):
+        return
+    button.setProperty("gsmapa_on_selection", bool(selected))
+    _apply_link(button)
+    # Kolor tekstu odnośnika ustawia arkusz stylów (selektor z właściwością) — trzeba go odświeżyć.
+    repolish(button)
 
 
 def link_button(button, icon_name: str = ""):

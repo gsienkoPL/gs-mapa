@@ -189,7 +189,7 @@ def gml_to_gpkg(gml_path: str, gpkg: Path, progress: Optional[Callable[[float], 
 
 
 def add_app_layers(path: str, group_name: Optional[str] = None, project: Optional[QgsProject] = None,
-                   origin: Optional[str] = None) -> list:
+                   origin: Optional[str] = None, parent_group: str = "") -> list:
     """
     Dodaje do projektu wszystkie tabele pliku aktu (GPKG lub inny plik OGR) w jednej grupie.
 
@@ -198,6 +198,8 @@ def add_app_layers(path: str, group_name: Optional[str] = None, project: Optiona
 
     :param origin: plik wskazany przez użytkownika (np. GML, z którego powstał GPKG) —
         zapisywany we własności warstwy ``gs_mapa/app_source``.
+    :param parent_group: grupa nadrzędna w drzewie warstw (np. zbiór z katalogu); tworzona na
+        górze drzewa, gdy jej nie ma — akty jednego zbioru lądują wtedy w jednym miejscu.
     :return: dodane warstwy (pusta lista, gdy pliku nie da się odczytać).
     """
     project = project or QgsProject.instance()
@@ -223,7 +225,12 @@ def add_app_layers(path: str, group_name: Optional[str] = None, project: Optiona
     # rysuje się w innym miejscu mapy bez żadnego komunikatu — układ pliku wygrywa.
     enforce_file_crs(layers, path)
     layers.sort(key=lambda l: _ORDER.index(l.name()) if l.name() in _ORDER else len(_ORDER))
-    group = project.layerTreeRoot().insertGroup(0, group_name or Path(path).name)
+    root = project.layerTreeRoot()
+    if parent_group:
+        parent = root.findGroup(parent_group) or root.insertGroup(0, parent_group)
+        group = parent.addGroup(group_name or Path(path).name)
+    else:
+        group = root.insertGroup(0, group_name or Path(path).name)
     for layer in layers:
         project.addMapLayer(layer, False)
         group.addLayer(layer)
@@ -231,9 +238,10 @@ def add_app_layers(path: str, group_name: Optional[str] = None, project: Optiona
 
 
 class _GmlImportTask(QgsTask):
-    def __init__(self, gml_path: str, gpkg: Path):
+    def __init__(self, gml_path: str, gpkg: Path, group: str = ""):
         super().__init__(f"GS Mapa: zapis {Path(gml_path).name} do GeoPackage", QgsTask.Flag.CanCancel)
         self.gml_path = gml_path
+        self.group = group
         self.gpkg = gpkg
         self.error: Optional[str] = None
         self.done: Optional[Callable] = None  # ustawiany przez serwis
@@ -271,21 +279,22 @@ class AppFileService(QObject):
     def busy(self) -> bool:
         return bool(self._tasks)
 
-    def add_file(self, path: str) -> bool:
+    def add_file(self, path: str, group: str = "") -> bool:
         """
         Dodaje plik aktu: GPKG od razu, GML po zapisie do GeoPackage (w tle).
 
+        :param group: grupa nadrzędna w drzewie warstw (``add_app_layers(parent_group=…)``).
         :return: ``True``, gdy plik został dodany albo zapis ruszył.
         """
         if not Path(path).is_file():
             self.failed.emit(path, "Plik nie istnieje.")
             return False
         if Path(path).suffix.lower() != ".gml":
-            return self._finish(path, path)
+            return self._finish(path, path, group)
         gpkg = gpkg_target(path)
         if gpkg_is_current(path, gpkg):
-            return self._finish(path, str(gpkg))
-        task = _GmlImportTask(path, gpkg)
+            return self._finish(path, str(gpkg), group)
+        task = _GmlImportTask(path, gpkg, group)
         task.done = self._on_task_done
         task.progressChanged.connect(lambda value, p=path: self.progress.emit(p, value))
         self._tasks.append(task)
@@ -313,12 +322,12 @@ class AppFileService(QObject):
         if task in self._tasks:
             self._tasks.remove(task)
         if ok:
-            self._finish(task.gml_path, str(task.gpkg))
+            self._finish(task.gml_path, str(task.gpkg), task.group)
         else:
             self.failed.emit(task.gml_path, task.error or "Nie udało się zapisać GML do GeoPackage.")
 
-    def _finish(self, path: str, source: str) -> bool:
-        layers = add_app_layers(source, Path(path).name, origin=path)
+    def _finish(self, path: str, source: str, group: str = "") -> bool:
+        layers = add_app_layers(source, Path(path).name, origin=path, parent_group=group)
         if not layers:
             self.failed.emit(path, "QGIS nie odczytał żadnej tabeli z pliku.")
             return False

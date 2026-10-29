@@ -484,6 +484,29 @@ def update_draft(source: ActSource, version_id: str, version_start: str, crs: Op
     }
 
 
+def file_draft(source) -> dict:
+    """
+    Stan formularza kreatora z pliku **bez** zmiany wersji — podgląd „Szczegóły”.
+
+    W odróżnieniu od :func:`update_draft` wartości zostają takie, jak w pliku: ``wersjaId``,
+    ``koniecWersjiObiektu`` i „obowiązuje do” nie są ruszane, bo podgląd nie tworzy nowej
+    wersji. Wskazanie warstw i plik wynikowy są puste — w podglądzie nic nie jest liczone
+    ani zapisywane.
+
+    :param source: akt odczytany z GML (:class:`ActSource`) albo z GeoPackage
+        (``services.app_source.TemplateSource`` — te same nazwy pól).
+    :return: stan w formacie szkicu kreatora (:meth:`AppCreatorDialog.set_state`).
+    """
+    return {
+        "format": "gs-mapa-app30-draft", "version": 1,
+        "act": dict(source.act or {}),
+        "extent": {"dissolve": True}, "crs": getattr(source, "crs", None) or 2180, "precision": 8,
+        "documents": [dict(item) for item in source.documents],
+        "drawings": [dict(item) for item in source.drawings],
+        "objects": {}, "output": "",
+    }
+
+
 def update_filename(namespace: str, local_id: str, version_id: str) -> str:
     """Nazwa pliku nowej wersji jak w Rejestrze: ``PL.ZIPPZP.3038_226101-MPZP_<lokalnyId>_<wersjaId>.gml``."""
     stem = "_".join(part for part in (namespace.replace("/", "_"), local_id, version_id) if part)

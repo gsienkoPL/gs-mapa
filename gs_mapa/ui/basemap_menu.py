@@ -1,18 +1,22 @@
 """
 Menu „Podkład ▾” paska narzędzi GS Mapa (zastępuje kartę „Mapy podkładowe”).
 
-Grupa wyłączna: Brak, OpenStreetMap, BDOT10k — zaznaczenie odzwierciedla podkład widoczny
-na mapie. Wybór podkładu dodaje go istniejącą ścieżką ``BasemapService.add`` (raster, wygląd
-jak w przeglądarce) i ukrywa pozostałe podkłady wtyczki; „Brak” tylko je ukrywa — warstwy
-użytkownika i ich ustawienia zostają w projekcie. Wersje wektorowe (obiekty i atrybuty)
-są w podmenu, a opisy, atrybucje i wersje stylów — w oknie „Źródła i licencje podkładów…”.
+Grupa wyłączna: „Brak” i podkłady wektorowe (pozycja na każdy styl kafli MVT —
+obiekty i atrybuty). Zaznaczenie odzwierciedla podkład widoczny na mapie. Wybór
+podkładu dodaje go istniejącą ścieżką ``BasemapService.add`` i ukrywa pozostałe
+podkłady wtyczki; „Brak” tylko je ukrywa — warstwy użytkownika i ich ustawienia
+zostają w projekcie. Opisy, atrybucje i lista stylów są w oknie
+„Źródła i licencje podkładów…”.
+
+Warstwy rastrowe podkładów nie są już dodawane (wtyczka nie ma ścieżki rastrowej);
+stare warstwy rastrowe z projektów zostają na mapie, ale menu ich nie wybiera.
 """
 
 from __future__ import annotations
 
 import html
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtGui import QAction, QActionGroup
@@ -20,7 +24,7 @@ from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox, QLabel, QMenu, QVBoxL
 from qgis.core import QgsProject
 
 from ..core.basemaps import BASEMAPS, BASEMAPS_BY_ID
-from ..services.basemaps import PROP_ID, PROP_KIND, RASTER, VECTOR, BasemapService
+from ..services.basemaps import PROP_ID, PROP_KIND, PROP_STYLE, VECTOR, BasemapService
 from . import theme
 
 logger = logging.getLogger("GSMapa.BasemapMenu")
@@ -29,6 +33,9 @@ logger = logging.getLogger("GSMapa.BasemapMenu")
 SHORT_DESCRIPTIONS = {"osm": "mapa ogólna, styl OSM Bright", "bdot10k": "mapa topograficzna GUGiK"}
 
 NONE_ID = ""
+
+#: Klucz pozycji menu: ``NONE_ID`` (Brak) albo para (id podkładu, id stylu).
+Choice = Optional[Tuple[str, str]]
 
 
 class BasemapMenu(QMenu):
@@ -41,26 +48,21 @@ class BasemapMenu(QMenu):
         self.setTitle(self.tr("Podkład"))
         self.setToolTipsVisible(True)
         self._service = service
-        self._actions: Dict[str, QAction] = {}
+        self._actions: Dict[Choice, QAction] = {}
 
         self.addSection(self.tr("Podkład pod danymi z rejestru"))
         self._group = QActionGroup(self)
         self._group.setExclusive(True)
-        none = self._choice(NONE_ID, self.tr("Brak"), self.tr("Ukryj podkłady wtyczki (warstwy zostają na mapie)"))
+        none = self._choice(None, self.tr("Brak"),
+                            self.tr("Ukryj podkłady wtyczki (warstwy zostają na mapie)"))
         none.setChecked(True)
-        for basemap in BASEMAPS:
-            self._choice(basemap.id, basemap.name,
-                         f"{SHORT_DESCRIPTIONS.get(basemap.id, basemap.description)} — {basemap.attribution}")
-
-        vector = self.addMenu(self.tr("Wersja wektorowa (obiekty i atrybuty)"))
-        vector.setToolTipsVisible(True)
         for basemap in BASEMAPS:
             for style in basemap.vector_styles:
                 label = f"{basemap.name} — {style.name}" if len(basemap.vector_styles) > 1 else basemap.name
-                action = vector.addAction(label)
-                action.setToolTip(self.tr("Styl konwertowany przez QGIS — może się różnić od mapy w przeglądarce"))
-                action.setData((basemap.id, style.id))
-                action.triggered.connect(self._on_vector_triggered)
+                tooltip = (f"{SHORT_DESCRIPTIONS.get(basemap.id, basemap.description)} · "
+                           f"{self.tr('kafle wektorowe — obiekty i atrybuty')} — {basemap.attribution}")
+                self._choice((basemap.id, style.id), label, tooltip)
+
         self.addSeparator()
         self.sources_action = self.addAction(self.tr("Źródła i licencje podkładów…"))
         self.sources_action.triggered.connect(self.show_sources)
@@ -72,42 +74,43 @@ class BasemapMenu(QMenu):
         project.cleared.connect(self._on_project_changed)
         self.refresh_state()
 
-    def _choice(self, basemap_id: str, text: str, tooltip: str) -> QAction:
+    def _choice(self, choice: Choice, text: str, tooltip: str) -> QAction:
         action = QAction(text, self)
         action.setCheckable(True)
         action.setToolTip(tooltip)
-        action.setData(basemap_id)
+        action.setData(choice)
         action.triggered.connect(self._on_choice_triggered)
         self._group.addAction(action)
         self.addAction(action)
-        self._actions[basemap_id] = action
+        self._actions[choice] = action
         return action
 
     # --- stan ---------------------------------------------------------------------------
 
     @staticmethod
     def _basemap_nodes():
-        """Węzły drzewa warstw z podkładami wtyczki: (id podkładu, węzeł)."""
+        """Węzły drzewa warstw z podkładami wektorowymi wtyczki: (id, styl, węzeł)."""
         root = QgsProject.instance().layerTreeRoot()
         for layer in QgsProject.instance().mapLayers().values():
             basemap_id = layer.customProperty(PROP_ID)
-            if not basemap_id:
+            if not basemap_id or layer.customProperty(PROP_KIND) != VECTOR:
                 continue
             node = root.findLayer(layer.id())
             if node is not None:
-                yield basemap_id, node
+                yield basemap_id, layer.customProperty(PROP_STYLE), node
 
-    def current(self) -> str:
-        """Podkład widoczny na mapie (pierwszy od góry drzewa) albo ``""`` (Brak)."""
+    def current(self) -> Choice:
+        """Podkład widoczny na mapie (pierwszy od góry drzewa) albo ``None`` (Brak)."""
         root = QgsProject.instance().layerTreeRoot()
         order = {layer.id(): i for i, layer in enumerate(root.layerOrder())}
-        visible = sorted(((order.get(node.layerId(), 1e9), basemap_id) for basemap_id, node in self._basemap_nodes()
-                          if node.isVisible()), key=lambda item: item[0])
-        return visible[0][1] if visible else NONE_ID
+        visible = sorted(((order.get(node.layerId(), 1e9), (basemap_id, style_id))
+                          for basemap_id, style_id, node in self._basemap_nodes() if node.isVisible()),
+                         key=lambda item: item[0])
+        return visible[0][1] if visible else None
 
     def refresh_state(self, *_args) -> None:
         current = self.current()
-        action = self._actions.get(current) or self._actions[NONE_ID]
+        action = self._actions.get(current) or self._actions[None]
         action.setChecked(True)
 
     def _on_project_changed(self, *_args) -> None:
@@ -115,50 +118,55 @@ class BasemapMenu(QMenu):
 
     # --- wybór --------------------------------------------------------------------------------
 
-    def _show_only(self, basemap_id: str, kind: Optional[str] = None, style_id: Optional[str] = None) -> None:
-        """Ukrywa podkłady wtyczki inne niż wybrany (``basemap_id``/``kind``)."""
+    def _show_only(self, choice: Choice) -> None:
+        """Ukrywa podkłady wtyczki inne niż wybrany (``choice`` = (id, styl) albo ``None``)."""
         for layer in QgsProject.instance().mapLayers().values():
             if not layer.customProperty(PROP_ID):
                 continue
             node = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
             if node is None:
                 continue
-            keep = layer.customProperty(PROP_ID) == basemap_id and (kind is None or layer.customProperty(PROP_KIND) == kind)
+            keep = choice is not None and (layer.customProperty(PROP_ID), layer.customProperty(PROP_STYLE)) == choice
             if not keep:
                 node.setItemVisibilityChecked(False)
 
-    def select(self, basemap_id: str, kind: str = RASTER, style_id: Optional[str] = None):
+    def select(self, basemap_id: str, style_id: Optional[str] = None):
         """
-        Pokazuje podkład ``basemap_id`` (dodaje go, gdy go nie ma) i ukrywa pozostałe; ``""`` — Brak.
+        Pokazuje podkład ``basemap_id`` w stylu ``style_id`` (dodaje go, gdy go nie ma)
+        i ukrywa pozostałe; ``""`` — Brak.
 
         :return: warstwa podkładu albo ``None`` (Brak albo błąd).
         """
         if basemap_id == NONE_ID:
-            self._show_only(NONE_ID)
+            self._show_only(None)
             self.message.emit("Podkład: brak (podkłady wtyczki ukryte)", "INFO")
             self.refresh_state()
             return None
-        layer, created = self._service.add(basemap_id, kind, style_id)
+        style = BASEMAPS_BY_ID[basemap_id].vector_style(style_id)
+        if style is None:
+            self.message.emit(f"Podkład {BASEMAPS_BY_ID[basemap_id].name} nie ma stylu {style_id}.", "BŁĄD")
+            self.refresh_state()
+            return None
+        layer, created = self._service.add(basemap_id, style.id)
         if layer is None:
             self.message.emit(f"Nie udało się dodać podkładu {BASEMAPS_BY_ID[basemap_id].name} — sprawdź połączenie "
                               f"z serwerem kafli i spróbuj ponownie.", "BŁĄD")
             self.refresh_state()
             return None
-        self._show_only(basemap_id, kind)
+        self._show_only((basemap_id, style.id))
         self.message.emit(f"{'Dodano' if created else 'Pokazano'} podkład: {layer.name()}", "INFO")
         self.refresh_state()
         return layer
 
     def _on_choice_triggered(self) -> None:
         action = self.sender()
-        if action is not None:
-            self.select(action.data())
-
-    def _on_vector_triggered(self) -> None:
-        action = self.sender()
-        if action is not None:
-            basemap_id, style_id = action.data()
-            self.select(basemap_id, VECTOR, style_id)
+        if action is None:
+            return
+        choice = action.data()
+        if choice:
+            self.select(choice[0], choice[1])
+        else:
+            self.select(NONE_ID)
 
     # --- źródła i licencje ------------------------------------------------------------------------
 
@@ -169,13 +177,13 @@ class BasemapMenu(QMenu):
             rows.append(
                 f"<p><b>{html.escape(basemap.name)}</b><br>{html.escape(basemap.description)}<br>"
                 f"<span style='color:{{c:muted}}'>{html.escape(basemap.attribution)}<br>"
-                f"{self.tr('Wersja stylu rastra')}: {html.escape(self._service.raster_version(basemap))}"
-                f" · {self.tr('Style wektorowe')}: {html.escape(styles)}</span></p>"
+                f"{self.tr('Style wektorowe')}: {html.escape(styles)}<br>"
+                f"{self.tr('Zakres kafli')}: {basemap.vector_zmin}–{basemap.vector_zmax}</span></p>"
             )
         return "".join(rows)
 
     def show_sources(self) -> QDialog:
-        """Okno „Źródła i licencje podkładów” (opis, atrybucja, wersje stylów)."""
+        """Okno „Źródła i licencje podkładów” (opis, atrybucja, style)."""
         dialog = QDialog(self.parentWidget())
         dialog.setWindowTitle(self.tr("Źródła i licencje podkładów"))
         dialog.setObjectName("GSMapaBasemapSources")

@@ -155,6 +155,8 @@ class AppTab(QWidget):
         self._dialog: Optional[AppValidationDialog] = None
         self._convert_dialog: Optional[AppConvertDialog] = None
         self._creator_dialog: Optional[AppCreatorDialog] = None
+        #: Okno „Szczegóły” — osobna instancja kreatora bez edycji (nie rusza stanu kreatora).
+        self._details_dialog: Optional[AppCreatorDialog] = None
         self._template_dialog: Optional[AppTemplateDialog] = None
         self._set_dialog: Optional[AppSetDialog] = None
         self._unit: Optional[Unit] = None
@@ -534,13 +536,18 @@ class AppTab(QWidget):
         )
         return self.add_file(path) if path else False
 
-    def add_file(self, path: str) -> bool:
+    def add_file(self, path: str, group: str = "") -> bool:
+        """
+        Dodaje plik aktu do mapy (GML przez GeoPackage w tle).
+
+        :param group: grupa nadrzędna w drzewie warstw — akty jednego zbioru w jednej grupie.
+        """
         if Path(path).suffix.lower() == ".gml":
             self.status.setText(self.tr("Zapis {0} do GeoPackage…").format(Path(path).name))
             self.progress.setValue(0)
             self.progress.setVisible(True)
         self.message.emit(f"Dodawanie pliku aktu: {path}", "INFO")
-        return self._files.add_file(path)
+        return self._files.add_file(path, group) if group else self._files.add_file(path)
 
     def _on_template_report(self, text: str, level: str) -> None:
         """Braki w tabeli wzoru po zapisaniu zmian — jedno zdanie w pasku komunikatów panelu."""
@@ -626,6 +633,54 @@ class AppTab(QWidget):
         self.message.emit(f"Wczytano GeoPackage {path}: dane tylko do odczytu, GML z „Generuj GML”", "INFO")
         return True
 
+    def edit_file(self, path: str) -> bool:
+        """
+        „Edytuj”: plik z listy ostatnich w kreatorze, w trybie edycji.
+
+        GML otwiera się jako **nowa wersja aktu** (ten sam ``lokalnyId``, nowa ``wersjaId``, zapis
+        tworzy dwa pliki), GeoPackage — w trybie edycji w tabelach (dane tylko do odczytu
+        w formularzu, zmiany w tabelach QGIS).
+
+        :param path: plik ``.gml`` albo ``.gpkg`` z listy ostatnich.
+        :return: ``True``, gdy kreator wczytał plik.
+        """
+        target = Path(path)
+        creator = self.open_creator()
+        ok = (creator.load_update_file(str(target)) if target.suffix.lower() == ".gml"
+              else creator.load_table_source(str(target)))
+        if not ok:
+            self.message.emit(f"Nie wczytano {target.name}: brak danych APP w pliku", "UWAGA")
+            return False
+        self._remember(str(target))
+        return True
+
+    def show_details(self, path: str) -> Optional[AppCreatorDialog]:
+        """
+        „Szczegóły”: okno jak kreator, ale tylko do odczytu — akt, dokumenty i rysunki z pliku.
+
+        Okno ma własną instancję kreatora, więc otwarcie podglądu nie kasuje tego, co użytkownik
+        ma w kreatorze (np. przygotowywana nowa wersja aktu). Warstwy nie są ruszane, a plik
+        nie jest zapisywany.
+
+        :param path: plik ``.gml`` albo ``.gpkg`` z listy ostatnich.
+        :return: okno podglądu; ``None``, gdy pliku nie dało się odczytać.
+        """
+        if self._details_dialog is None:
+            self._details_dialog = AppCreatorDialog(
+                self.window(), canvas=None, message=self.message.emit, unit=self._unit,
+                file_service=self._files, config=self._config,
+            )
+        dialog = self._details_dialog
+        dialog.set_details_mode(True)
+        if not dialog.load_details(path):
+            self.message.emit(f"Nie wczytano {Path(path).name}: brak aktu, dokumentów i rysunków", "UWAGA")
+            return None
+        self._remember(path)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        return dialog
+
     # --- ostatnie pliki ------------------------------------------------------------------
 
     def recent_entries(self) -> List[dict]:
@@ -666,7 +721,11 @@ class AppTab(QWidget):
 
     def _on_recent_action(self, action: str, path: str) -> None:
         """Akcja na wierszu listy ostatnich plików."""
-        if action == "add":
+        if action == "edit":
+            self.edit_file(path)
+        elif action == "details":
+            self.show_details(path)
+        elif action == "add":
             self.add_file(path)
         elif action == "validate":
             self.open_validation(path)
@@ -797,7 +856,8 @@ class AppTab(QWidget):
         self._background_validation.cancel()
         self._convert.cancel()
         self._files.cancel()
-        for name in ("_dialog", "_convert_dialog", "_creator_dialog", "_template_dialog", "_set_dialog"):
+        for name in ("_dialog", "_convert_dialog", "_creator_dialog", "_details_dialog", "_template_dialog",
+                     "_set_dialog"):
             dialog = getattr(self, name)
             if dialog is not None:
                 dialog.close()
