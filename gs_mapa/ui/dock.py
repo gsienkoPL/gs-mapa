@@ -28,7 +28,8 @@ from qgis.core import (
 )
 
 from ..core.act_index import ActIndexEntry, count_by_type, short_title
-from ..services.gdal_env import ensure_vsicurl_extensions
+from ..services import act_files
+from ..services.download import FileDownloader
 from ..core.units import creator_unit
 from ..core.config import GSMapaConfig, DATA_TYPES, MANIFEST_URL
 from ..core.labels import format_date, plural_layers
@@ -115,6 +116,11 @@ class GSMapaDock(QgsDockWidget):
         self._last_message = ""
         #: Akty, dla których „Dodaj warstwy planu” czeka na plik ``akty/{act_id}.json``.
         self._pending_act_layers: set = set()
+        #: Pliki planów pobierane do bufora: adres w buckecie -> (nazwa grupy, ``act_id``).
+        self._pending_act_files: dict = {}
+        self._act_downloader = FileDownloader()
+        self._act_downloader.finished.connect(self._on_act_file_ready)
+        self._act_downloader.failed.connect(self._on_act_file_failed)
         #: Wpisy indeksu aktów — dopasowanie aktów z plików dodanych do mapy (typ + TERYT).
         self._act_entries: list = []
 
@@ -559,8 +565,9 @@ class GSMapaDock(QgsDockWidget):
 
     def add_act_layers(self, entry: ActIndexEntry) -> None:
         """
-        „Dodaj warstwy planu”: GPKG aktu z bucketa (pole ``dane.gpkg`` pliku ``akty/{act_id}.json``)
-        przez ``/vsicurl/`` — ta sama ścieżka co „Granica planu → dodaj do mapy” w oknie informacji.
+        „Dodaj warstwy planu”: GPKG aktu z bucketa (pole ``dane.gpkg`` pliku ``akty/{act_id}.json``),
+        pobierany do bufora wtyczki i otwierany z dysku — ta sama droga co „Granica planu →
+        dodaj do mapy” w oknie informacji.
         """
         if entry.act_id in acts_on_map():
             return
@@ -569,20 +576,53 @@ class GSMapaDock(QgsDockWidget):
         self._act_service.fetch(entry.act_id, template)
 
     def _add_act_gpkg(self, details) -> None:
+        """
+        Pobiera plik planu do folderu zapisu; warstwy dodaje :meth:`_on_act_file_ready`.
+
+        Nie otwieramy pliku wprost z bucketa przez ``/vsicurl/``: QGIS dekoduje
+        kodowanie procentowe w ścieżce, a libcurl odrzuca spację, więc akty z gmin
+        o nazwie ze spacją (np. ``066101_Biała Podlaska``) w ogóle się nie otwierały
+        (``querySublayers()`` → 0 warstw).
+        """
         url = details.dane.get("gpkg")
         if not is_bucket_url(url):
             self._notify(self.tr("Akt {0} nie ma opublikowanego pliku GPKG — warstw planu nie da się dodać.")
                          .format(details.act_id), "warning")
             return
-        ensure_vsicurl_extensions()
+        folder = act_files.download_folder(self._config, self)
+        if not folder:
+            self.log(f"Pominięto dodanie warstw planu {details.act_id}: nie wybrano folderu zapisu", "UWAGA")
+            return
         title = short_title(details.tytul) or details.act_id
         name = f"{details.typ.upper()} — {title}"
-        if add_vector_layers(f"/vsicurl/{url}", name, include_tables=False, act_id=details.act_id) is None:
-            self.log(f"Nie udało się otworzyć {url}", "BŁĄD")
+        self._pending_act_files[url] = (name, details.act_id)
+        self.log(f"Pobieranie pliku planu {details.act_id}: {url}")
+        self._act_downloader.download(url, str(act_files.act_folder(folder, details.act_id)))
+
+    def _on_act_file_ready(self, url: str, path: str) -> None:
+        """Pobrany plik planu: dodaje jego warstwy do mapy."""
+        pending = self._pending_act_files.pop(url, None)
+        if pending is None:
             return
-        self.log(f"Dodano warstwy planu {details.act_id}: {url}")
+        name, act_id = pending
+        if add_vector_layers(path, name, include_tables=False, act_id=act_id) is None:
+            self.log(f"Nie udało się otworzyć {path}", "BŁĄD")
+            self._notify(self.tr("Nie udało się otworzyć warstw planu {0} — plik: {1}").format(act_id, path),
+                         "warning")
+            return
+        self.log(f"Dodano warstwy planu {act_id}: {path}")
         self._notify(self.tr("Dodano warstwy planu: {0}").format(name), "success")
         self._search_panel.set_on_map(acts_on_map())
+
+    def _on_act_file_failed(self, url: str, message: str) -> None:
+        """Nieudane pobranie pliku planu — komunikat zamiast ciszy."""
+        pending = self._pending_act_files.pop(url, None)
+        if pending is None:
+            return
+        _name, act_id = pending
+        self.log(f"Nie udało się pobrać pliku planu {act_id}: {message}", "BŁĄD")
+        self._notify(self.tr("Nie udało się pobrać danych aktu {0} ({1}).").format(act_id, message),
+                     "warning")
 
     def remove_act_layers(self, entry: ActIndexEntry) -> int:
         """„Usuń warstwy planu z mapy” — pojedyncza, łatwa do cofnięcia akcja (bez potwierdzenia)."""

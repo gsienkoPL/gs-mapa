@@ -10,7 +10,7 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.1.5
+version=0.1.6
 author=Grzegorz Sieńko
 email=gsienko@gis-serwer.pl
 
@@ -20,7 +20,16 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.1.5 - File preview, whole-set conversion and document downloads
+changelog=0.1.6 - Act validation from the map and unit clearing
+    - Validation window: a "Z aktów w QGIS…" button picks an act or an APP file already
+      loaded in the current project and validates it directly, without pointing at a path
+      on disk (acts from the Register need no manual GML download).
+    - Context bar: a trash button clears the selected unit in one click, without opening
+      the unit chooser; it is visible only while a unit is set.
+    - Plans tab: act layers are downloaded to the download folder and opened from disk
+      instead of being read over the network, so acts from units whose name contains
+      a space (e.g. "Biała Podlaska") open instead of ending with "Nie udało się otworzyć".
+    0.1.5 - File preview, whole-set conversion and document downloads
     - "Szczegóły": an APP file opened read-only from the recent-files list, with the act,
       document and drawing details and no editing.
     - Documents and drawings: a "Pobierz…" link instead of a raw address, download to a

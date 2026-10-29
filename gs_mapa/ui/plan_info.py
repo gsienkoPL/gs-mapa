@@ -5,14 +5,12 @@ import logging
 import urllib.parse
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
-from pathlib import Path
 from typing import Dict, List, Optional
 
 from qgis.PyQt.QtCore import QEvent, Qt, QUrl, QUrlQuery, pyqtSignal
 from qgis.PyQt.QtGui import QDesktopServices, QPalette
 from qgis.PyQt.QtWidgets import (
     QDialog,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -44,12 +42,14 @@ from ..core.config import GSMapaConfig
 from ..core.labels import format_date, plural_acts, status_role, type_description, type_role
 from ..core.models import ActDetails, ActDocument
 from ..services.download import FileDownloader
+from ..services import act_files
 from ..services.gdal_env import ensure_vsicurl_extensions
 from ..services.acts import parse_act_id, registry_url
 from ..services.layers import LayerService
 from ..services.manifest_parser import ManifestParser
 from ..services.app_style import apply_app_style
 from ..services.app_crs import assign_file_crs, enforce_file_crs
+from ..services.app_open_acts import ACT_PROPERTY as _ACT_PROPERTY
 from . import theme
 from ..services.pog_style import apply_pog_style
 
@@ -382,7 +382,8 @@ def _link(href: str, text: str) -> str:
 
 
 #: Właściwość warstwy z identyfikatorem aktu, którego dane pokazuje (stan „na mapie” na karcie Plany).
-ACT_PROPERTY = "gsmapa/idIIP"
+#: (``services/app_open_acts.py`` — jedno źródło prawdy dla obu miejsc.)
+ACT_PROPERTY = _ACT_PROPERTY
 
 
 def add_vector_layers(source: str, name: str, include_tables: bool, act_id: str = ""):
@@ -760,43 +761,55 @@ class PlanInfoDialog(QDialog):
 
     def add_to_map(self, url: str, name: str, kind: str, act_id: str = ""):
         """
-        Dodaje plik z bucketa do mapy przez ``/vsicurl/`` (bez pobierania całego pliku).
+        Dodaje plik z bucketa do mapy: rysunek (``raster``) przez ``/vsicurl/``,
+        plik planu (``vector``) z folderu zapisu (pobrany na dysk).
+
+        Rysunek czytamy strumieniowo (GeoTIFF obsługuje zakresy bajtów). Plik
+        wektorowy pobieramy w całości: QGIS dekoduje kodowanie procentowe w ścieżce
+        ``/vsicurl/``, a libcurl odrzuca spację, więc akty z gmin o nazwie ze spacją
+        (np. ``066101_Biała Podlaska``) nie otwierały się wprost z bucketa.
 
         :param url: adres pliku w buckecie wtyczki.
         :param name: nazwa warstwy.
         :param kind: ``raster`` albo ``vector``.
-        :return: dodana warstwa albo ``None``.
+        :return: dodana warstwa (raster) albo ``None`` — wektor dochodzi po pobraniu.
         """
         if not is_bucket_url(url):
             logger.warning(f"Pominięto dodanie pliku spoza bucketa: {url}")
             return None
-        ensure_vsicurl_extensions()
-        source = f"/vsicurl/{url}"
         if kind == "raster":
-            layer = QgsRasterLayer(source, name, "gdal")
+            ensure_vsicurl_extensions()
+            layer = QgsRasterLayer(f"/vsicurl/{url}", name, "gdal")
             if not layer.isValid():
                 return self._open_failed(url, name)
             apply_drawing_resampling(layer)
             QgsProject.instance().addMapLayer(layer)
             return layer
 
-        # Z serwera dodajemy tylko warstwy z geometrią — tabele bez geometrii
-        # są w pełnej wersji po pobraniu pliku (download_and_add).
-        return (self._add_vector_layers(source, name, include_tables=False, act_id=act_id)
-                or self._open_failed(url, name))
+        # Plik planu: folder zapisu, pobranie i otwarcie z dysku
+        # (warstwy dodaje _on_download_finished).
+        folder = self._choose_download_dir()
+        if not folder:
+            logger.info(f"Pominięto dodanie pliku {url}: nie wybrano folderu zapisu")
+            return None
+        self._pending_downloads[url] = (name, "vector", act_id)
+        self._push("info", self.tr("Pobieranie {0}...").format(name))
+        self._downloader.download(url, str(act_files.act_folder(folder, act_id)))
+        return None
 
     def _add_vector_layers(self, source: str, name: str, include_tables: bool, act_id: str = ""):
         """Dodaje warstwy pliku wektorowego aktu (patrz :func:`add_vector_layers`)."""
         return add_vector_layers(source, name, include_tables, act_id)
 
-    def _choose_download_dir(self) -> str:
-        """Pyta o folder na pobrane pliki; zapamiętuje wybór. Pusty = anulowano."""
-        folder = QFileDialog.getExistingDirectory(
-            self, "Folder na pobrane pliki aktów", self._config.download_dir or str(Path.home())
-        )
-        if folder:
-            self._config.download_dir = folder
-        return folder
+    def _choose_download_dir(self, ask_always: bool = False) -> str:
+        """
+        Folder zapisu plików aktów: zapamiętany w ustawieniach albo wybrany teraz.
+
+        :param ask_always: pytaj o folder nawet wtedy, gdy jest zapamiętany
+            (akcja „pobierz i dodaj” — użytkownik może chcieć innego miejsca).
+        :returns: ścieżka folderu; pusty łańcuch, gdy anulowano wybór.
+        """
+        return act_files.download_folder(self._config, self, ask_always=ask_always)
 
     def download_and_add(self, url: str, name: str, layer_type: str = "vector",
                          act_id: str = "", expected_size: Optional[int] = None) -> bool:
@@ -820,10 +833,10 @@ class PlanInfoDialog(QDialog):
         if act_id and parse_act_id(act_id) is None:
             logger.warning(f"Niepoprawny act_id: {act_id!r}")
             return False
-        folder = self._choose_download_dir()
+        folder = self._choose_download_dir(ask_always=True)
         if not folder:
             return False
-        target_dir = str(Path(folder, act_id)) if act_id else folder
+        target_dir = str(act_files.act_folder(folder, act_id))
         self._pending_downloads[url] = (name, layer_type, act_id)
         size = f" ({_format_size(expected_size)})" if expected_size else ""
         self._push("info", self.tr("Pobieranie {0}{1}...").format(name, size))

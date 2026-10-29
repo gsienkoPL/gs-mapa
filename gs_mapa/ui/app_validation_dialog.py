@@ -48,10 +48,12 @@ from qgis.gui import QgsFileWidget
 from ..core.app_recent import plural_objects
 from ..core.app_rules import ERROR, INFO, RULES, SEVERITY_LABELS, WARNING, group_identical
 from ..services.app_files import SOURCE_PROPERTY, AppFileService
+from ..services.app_open_acts import KIND_FILE, KIND_REGISTRY, OpenAct
 from ..services.app_validation import (
     AppValidationService, ValidationReport, compare_files, rules_text, style_error_layer, write_csv,
 )
 from . import theme
+from .app_open_acts_dialog import OpenActsDialog
 from .app_validation_summary import ValidationSummary
 from .widgets import ElidedLabel, WrappingItemDelegate
 
@@ -107,7 +109,9 @@ class AppValidationDialog(QDialog):
 
     def __init__(self, parent=None, canvas: Optional[Callable] = None,
                  validation_service: Optional[AppValidationService] = None,
-                 file_service: Optional[AppFileService] = None, message: Optional[Callable] = None):
+                 file_service: Optional[AppFileService] = None, message: Optional[Callable] = None,
+                 acts_provider: Optional[Callable[[], list]] = None,
+                 registry_loader: Optional[Callable[[str], bool]] = None):
         super().__init__(parent)
         # Własny wygląd wtyczki (makiety docs/ui), niezależny od stylu Qt w QGIS.
         theme.apply_plugin_style(self)
@@ -119,6 +123,10 @@ class AppValidationDialog(QDialog):
         self._service = validation_service or AppValidationService(self)
         self._files = file_service or AppFileService(self)
         self._message = message
+        #: Lista aktów i plików APP otwartych w QGIS (dostarcza karta „Pliki APP”).
+        self._acts_provider = acts_provider
+        #: Pobranie pliku GML aktu z Rejestru (dostarcza karta „Pliki APP”).
+        self._registry_loader = registry_loader
         self._report: Optional[ValidationReport] = None
         self._error_layers: list = []
 
@@ -154,9 +162,12 @@ class AppValidationDialog(QDialog):
         field_layout.addStretch(1)
         self.btn_choose = QPushButton(self.tr("Wybierz…"))
         self.btn_choose.setToolTip(self.tr("Wybierz plik GML APP do sprawdzenia"))
+        self.btn_open = QPushButton(self.tr("Z aktów w QGIS…"))
+        self.btn_open.setToolTip(self.tr("Sprawdź akt albo plik APP, który jest już otwarty w QGIS"))
         self.btn_validate = QPushButton(self.tr("Waliduj"))
         theme.primary(self.btn_validate)
         file_row.addWidget(self._file_field, 1)
+        file_row.addWidget(self.btn_open, 0)
         file_row.addWidget(self.btn_choose, 0)
         file_row.addWidget(self.btn_validate, 0)
         layout.addLayout(file_row)
@@ -286,6 +297,7 @@ class AppValidationDialog(QDialog):
         self.file_widget.fileChanged.connect(self._on_file_changed)
         self.previous_widget.fileChanged.connect(self._update_buttons)
         self.btn_choose.clicked.connect(self._choose_file)
+        self.btn_open.clicked.connect(self._choose_open_act)
         self.btn_validate.clicked.connect(self.start)
         self.btn_compare.clicked.connect(self.compare)
         self.btn_cancel.clicked.connect(self._service.cancel)
@@ -347,6 +359,48 @@ class AppValidationDialog(QDialog):
                                               self.tr("GML APP (*.gml *.GML)"))
         if path:
             self.set_path(path)
+
+    # --- akty otwarte w QGIS -------------------------------------------------
+
+    def _choose_open_act(self) -> None:
+        """„Z aktów w QGIS…” — wybór aktu albo pliku APP już wczytanego do QGIS."""
+        provider = self._acts_provider
+        acts = list(provider()) if provider is not None else []
+        picker = OpenActsDialog(acts, self)
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            return
+        act = picker.selected_act()
+        if act is None:
+            return
+        self.open_act(act)
+
+    def open_act(self, act: OpenAct) -> bool:
+        """
+        Sprawdza akt wskazany spośród tych, które są już otwarte w QGIS.
+
+        Plik GML z dysku walidujemy wprost; akt z Rejestru wymaga pobrania pliku
+        GML — to robi karta „Pliki APP” (``registry_loader``).
+
+        :param act: wybrany akt.
+        :return: ``True``, gdy walidacja została rozpoczęta.
+        """
+        if act.kind == KIND_FILE and act.path:
+            self.set_path(act.path)
+            return self.start()
+        if act.kind == KIND_REGISTRY:
+            loader = self._registry_loader
+            if loader is None:
+                return False
+            self.progress.setRange(0, 0)
+            self.progress.setFormat(self.tr("Pobieranie pliku GML aktu {0}…").format(act.act_id))
+            self.progress.setVisible(True)
+            if not loader(act.act_id):
+                self.progress.setRange(0, 100)
+                self.progress.setFormat("")
+                self.progress.setVisible(False)
+                self._log(self.tr("Nie udało się pobrać pliku GML aktu {0}.").format(act.act_id), "BŁĄD")
+            return True
+        return False
 
     def _on_previous_toggled(self, checked: bool) -> None:
         """Rozwija zwinięty wiersz porównania wersji."""

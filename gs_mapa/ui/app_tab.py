@@ -37,6 +37,7 @@ from ..core.app_set import published_keys
 from ..core.units import Unit
 from ..services.app_convert import AppConvertService
 from ..services.app_files import AppFileService
+from ..services.app_open_acts import open_acts
 from ..services.app_template_check import TemplateCheck
 from ..services.app_validation import AppValidationService
 from . import theme
@@ -434,15 +435,27 @@ class AppTab(QWidget):
 
         :return: ``True``, gdy rozpoczęto pobieranie opisu aktu.
         """
+        return self.validate_act_id(entry.act_id)
+
+    def validate_act_id(self, act_id: str) -> bool:
+        """
+        Pobiera plik GML aktu z GS Mapa i otwiera okno walidacji z tym plikiem.
+
+        Używane też dla aktów, które są już dodane do mapy — ich identyfikator
+        znamy z właściwości warstwy, a nie z indeksu.
+
+        :param act_id: identyfikator aktu (np. ``pog-5698``).
+        :return: ``True``, gdy rozpoczęto pobieranie opisu aktu.
+        """
         if not self._acts_url_template:
             self.status.setText(self.tr("Adres plików aktów GS Mapa nie jest jeszcze znany (manifest) — "
                                         "spróbuj za chwilę."))
             self.message.emit("Walidacja: adres plików aktów GS Mapa nie jest jeszcze znany (manifest)", "UWAGA")
             return False
-        self._validation_pending, self._validation_url = entry.act_id, None
-        self.status.setText(self.tr("Pobieranie opisu aktu {0} z GS Mapa…").format(entry.act_id))
-        self.message.emit(f"Walidacja {entry.act_id}: pobieranie opisu", "INFO")
-        self._validation_acts().fetch(entry.act_id, self._acts_url_template)
+        self._validation_pending, self._validation_url = act_id, None
+        self.status.setText(self.tr("Pobieranie opisu aktu {0} z GS Mapa…").format(act_id))
+        self.message.emit(f"Walidacja {act_id}: pobieranie opisu", "INFO")
+        self._validation_acts().fetch(act_id, self._acts_url_template)
         return True
 
     def _validation_note(self, text: str, level: str = "BŁĄD") -> None:
@@ -798,6 +811,7 @@ class AppTab(QWidget):
             self._dialog = AppValidationDialog(
                 self.window(), canvas=self._canvas, validation_service=self._validation,
                 file_service=self._files, message=lambda text, level: self.message.emit(text, level),
+                acts_provider=self._open_acts, registry_loader=self.validate_act_id,
             )
         self._dialog.show()
         self._dialog.raise_()
@@ -806,6 +820,10 @@ class AppTab(QWidget):
             self._dialog.set_path(path)
             self._dialog.start()
         return self._dialog
+
+    def _open_acts(self) -> list:
+        """Akty i pliki APP dostępne w bieżącym QGIS — do walidacji „z aktów w QGIS”."""
+        return open_acts(entries=self._act_entries)
 
     def open_conversion(self, path: Optional[str] = None) -> AppConvertDialog:
         """Okno konwersji GML APP 1.0 / 2.0 do APP 3.0."""

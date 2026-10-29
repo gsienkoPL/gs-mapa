@@ -5,7 +5,7 @@ Kontekst jednostki: jedna gmina, powiat albo województwo dla całej wtyczki (``
   w ustawieniach wtyczki; po wczytaniu projektu jednostka pochodzi z projektu, inaczej z ustawień.
 - :class:`UnitChooserDialog` — okno „Wybór jednostki”: jedno pole (nazwa albo TERYT) i filtr typu.
 - :class:`ContextBar` — pasek na górze doku (pkt 6.1): jednostka, „Zmień…”, „Wskaż na mapie”,
-  stan indeksu Rejestru i „Odśwież indeks”.
+  kosz „Usuń jednostkę”, stan indeksu Rejestru i „Odśwież indeks”.
 """
 
 from __future__ import annotations
@@ -222,8 +222,8 @@ class UnitChooserDialog(QDialog):
 
 class ContextBar(QWidget):
     """
-    Pasek kontekstu na górze doku: jednostka (nazwa, typ, TERYT), „Zmień…”, „Wskaż na mapie”,
-    a w drugiej linii stan indeksu Rejestru i „Odśwież indeks”.
+    Pasek kontekstu na górze doku: jednostka (nazwa, typ, TERYT), „Zmień…”, „Wskaż na mapie”
+    i kosz „Usuń jednostkę”, a w drugiej linii stan indeksu Rejestru i „Odśwież indeks”.
     """
 
     #: Użytkownik prosi o ponowne pobranie indeksu Rejestru.
@@ -286,6 +286,15 @@ class ContextBar(QWidget):
         for button in (self._btn_change, self._btn_choose):
             top.addWidget(button, 0, Qt.AlignmentFlag.AlignTop)
         top.addWidget(self._btn_pick, 0, Qt.AlignmentFlag.AlignTop)
+        # Kosz obok celownika: usuwa jednostkę bez wchodzenia w okno „Wybór jednostki”.
+        self._btn_clear = QToolButton()
+        self._btn_clear.setIconSize(QSize(theme.TOOLBAR_SIZE, theme.TOOLBAR_SIZE))
+        theme.set_icon(self._btn_clear, "trash")
+        self._btn_clear.setAccessibleName(self.tr("Usuń jednostkę"))
+        self._btn_clear.setToolTip(
+            self.tr("Usuń jednostkę: pasek wraca do stanu pustego, a wybór znika z projektu"))
+        self._btn_clear.setVisible(False)
+        top.addWidget(self._btn_clear, 0, Qt.AlignmentFlag.AlignTop)
         layout.addLayout(top)
 
         bottom = QHBoxLayout()
@@ -306,6 +315,7 @@ class ContextBar(QWidget):
         self._btn_change.clicked.connect(self.choose)
         self._btn_choose.clicked.connect(self.choose)
         self._btn_refresh.clicked.connect(self.refresh_requested)
+        self._btn_clear.clicked.connect(self.clear_unit)
         self._btn_pick.toggled.connect(self._on_pick_toggled)
         if self._uldk is not None:
             self._uldk.parcel_found.connect(self._on_parcel_found)
@@ -329,11 +339,22 @@ class ContextBar(QWidget):
         self._empty.setVisible(not has_unit)
         self._btn_change.setVisible(has_unit)
         self._btn_choose.setVisible(not has_unit)
+        self._btn_clear.setVisible(has_unit)
         if has_unit:
             self._name.setText(unit.display_name)
             self._details.setText(f"{unit.kind_label} · TERYT {unit.teryt}")
             self._name.setToolTip(unit.label)
         self.refresh_theme()
+
+    def clear_unit(self) -> None:
+        """
+        Usuwa wybór jednostki (kosz na pasku i „Usuń wybór” w oknie wyboru): wpis znika z projektu
+        i z „ostatnio używanej”, pasek wraca do stanu pustego.
+        """
+        if self._context.unit() is None:
+            return
+        self._context.set_unit(None)
+        self.message.emit("Jednostka: usunięto wybór", "INFO")
 
     def choose(self) -> Optional[Unit]:
         """
@@ -344,8 +365,7 @@ class ContextBar(QWidget):
         try:
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 if dialog.cleared():
-                    self._context.set_unit(None)
-                    self.message.emit("Jednostka: usunięto wybór", "INFO")
+                    self.clear_unit()
                 else:
                     unit = dialog.selected()
                     if unit is not None:
