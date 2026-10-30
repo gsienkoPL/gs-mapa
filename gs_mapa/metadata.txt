@@ -10,7 +10,7 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.1.0
+version=0.2.0
 author=Grzegorz Sieńko
 email=gsienko@gis-serwer.pl
 
@@ -20,7 +20,15 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.1.0 - First release in the QGIS plugin repository
+changelog=0.2.0 - Biological surface minimum below the regulation value is a warning
+    - General plan validation: a minimum biologically active surface share below the value in
+      the regulation annex is reported as a warning with its legal basis (§ 2(3): a zone
+      covered by binding local plans may go lower, but not below their own indicator), not as
+      an error. Lowering it to 2/3 in a town-centre area applies to local plans, not to the
+      general plan itself.
+    - The template GeoPackage no longer blocks such a value in the form and no longer raises
+      an entered value when the zone kind changes.
+    0.1.0 - First release in the QGIS plugin repository
     - Plans tab: POG, MPZP, ZPI and PZPW acts from the Spatial Planning Register with the
       official APP symbology, the national register layers, and a plan information tool
       with act documents and links.

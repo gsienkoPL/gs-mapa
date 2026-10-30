@@ -221,8 +221,10 @@ def tooltip(layer: Layer, item: Field, coded: bool = False,
     if layer.name == ZONE and item.name == "minUdzialPowierzchniBiologicznieCzynnej" and min_pbc:
         floors = _floors_text(min_pbc, symbols or {})
         if floors:
-            lines.append(f"Minimum dla rodzaju strefy (rozp. MRiT, zał. 1): {floors}. Niższa "
-                         "wartość to błąd w kontroli przed zapisem.")
+            lines.append(f"Minimum dla rodzaju strefy (zał. 1 do rozp. MRiT): {floors}. Niżej tylko "
+                         "wtedy, gdy obszar strefy obejmują obowiązujące plany miejscowe, i nie niżej "
+                         "niż najwyższy wskaźnik PBC w tych planach (§ 2 ust. 3 rozporządzenia) — "
+                         "rozbieżność zgłasza kontrola przed zapisem.")
     if item.required:
         lines.append("Pole wymagane w schemacie APP 3.0.")
     else:
@@ -542,9 +544,14 @@ def _expression(layer: Layer, item: Field, symbols: Dict[str, str],
         floors = _min_pbc_map(min_pbc) if (layer.name == ZONE and
                                            name == "minUdzialPowierzchniBiologicznieCzynnej") else {}
         if floors:
-            condition += f' AND {field} >= coalesce(map_get({_map_numbers(floors)}, "nazwa"), 0)'
-            description = (f"Wartość w procentach: od 0 do 100 i nie mniej niż minimum dla rodzaju "
-                           f"strefy ({_floors_text(min_pbc or {}, symbols)}).")
+            # Minimum z zał. 1 nie jest twardą granicą pola: § 2 ust. 3 rozporządzenia pozwala
+            # zejść niżej, gdy obszar strefy obejmują obowiązujące plany miejscowe (do najwyższego
+            # wskaźnika PBC w tych planach). Formularz nie ma danych MPZP, więc minimum tylko
+            # podpowiada wartość domyślną, a rozbieżność ocenia walidacja pliku.
+            description = (f"Wartość w procentach: od 0 do 100. Minimum dla rodzaju strefy "
+                           f"({_floors_text(min_pbc or {}, symbols)}) — niżej tylko wtedy, gdy obszar "
+                           f"strefy obejmują obowiązujące plany miejscowe, i nie niżej niż najwyższy "
+                           f"wskaźnik PBC w tych planach (§ 2 ust. 3 rozporządzenia).")
         return _check(name, condition, description, HARD)
     if item.type == DOUBLE or name == "zmiana":
         return _check(name, f"{field} >= 0", "Wartość nie może być ujemna.", HARD)
@@ -867,13 +874,12 @@ def layer_defaults(table: str, values: Optional[TemplateValues] = None,
     if table == ZONE:
         floors = _min_pbc_map(min_pbc)
         if floors:
-            # Pole poniżej minimum z rozporządzenia jest błędem, więc podpowiedź nie schodzi pod
-            # nie; wartość wyższa (własna decyzja planisty) zostaje, a przy zmianie rodzaju strefy
-            # na taki z wyższym minimum — jest podnoszona do minimum.
+            # Minimum z rozporządzenia wypełnia puste pole (i po zmianie rodzaju strefy — nadal
+            # puste), ale wpisanej wartości nie podnosi: § 2 ust. 3 pozwala zejść niżej, gdy
+            # strefę obejmują obowiązujące MPZP, a decyzja planisty nie może znikać w tle.
             field = _q("minUdzialPowierzchniBiologicznieCzynnej")
             put("minUdzialPowierzchniBiologicznieCzynnej",
-                f"with_variable('min', map_get({_map_numbers(floors)}, \"nazwa\"), "
-                f"if(coalesce({field}, 0) < coalesce(@min, 0), @min, coalesce({field}, @min)))",
+                f'coalesce({field}, map_get({_map_numbers(floors)}, "nazwa"))',
                 on_update=True)
     if table == ZONE and profiles:
         base = {code: ",".join(pool[0]) for code, pool in profiles.items() if pool[0]}

@@ -76,8 +76,10 @@ def zone_min_pbc(codes: Optional[dict] = None) -> Dict[str, Optional[int]]:
     Minimalny udział powierzchni biologicznie czynnej w rodzaju strefy: ``{kod: wartość [%]}``.
 
     Wartość ustala rozporządzenie (zał. 1 do rozp. MRiT z 8.12.2023 w brzmieniu z 22.11.2024):
-    plan nie może zejść poniżej niej w strefie danego rodzaju. ``None`` — rodzaj bez minimum
-    (SG, SO, SK) i zarazem brak wartości domyślnej w formularzu.
+    w strefie danego rodzaju plan nie schodzi poniżej niej, chyba że obszar strefy obejmują
+    obowiązujące plany miejscowe — wtedy wolno niżej, ale nie pod najwyższy wskaźnik PBC
+    w tych planach (§ 2 ust. 3 rozporządzenia). ``None`` — rodzaj bez minimum (SG, SO, SK),
+    gdzie wartość można ustalić dobrowolnie (art. 13e ust. 3 pkt 2 ustawy).
 
     :param codes: listy kodowe (``load_codes()``); domyślnie z zasobów wtyczki.
     """

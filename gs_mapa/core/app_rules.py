@@ -636,10 +636,20 @@ def _zones(doc: AppDocument, codes: CodeLists, out: _Collector) -> None:
                         zone, "minUdzialPowierzchniBiologicznieCzynnej")
             else:
                 # Minimum z rozporządzenia dla rodzaju strefy (SG, SO, SK — brak minimum).
+                # Zejść niżej wolno tylko w trybie § 2 ust. 3 rozporządzenia: gdy obszar strefy
+                # obejmują obowiązujące plany miejscowe, i nie niżej niż najwyższy wskaźnik PBC
+                # w tych planach. Z pliku POG tego nie widać (potrzebne dane MPZP), więc jest
+                # ostrzeżenie do weryfikacji, a nie błąd. Obniżenie do 2/3 w OZS (art. 20 ust. 3
+                # pkt 1 lit. b ustawy) dotyczy ustaleń planu miejscowego i decyzji o warunkach
+                # zabudowy, a nie wartości w planie ogólnym — progu strefy nie zmienia.
                 minimum = entry.get("min_pbc")
                 if minimum is not None and bio < Decimal(minimum):
-                    out.add(rule, ERROR, f"minUdzialPowierzchniBiologicznieCzynnej={bio} poniżej minimum "
-                                         f"{minimum}% dla strefy {entry['symbol']} (rozp. MRiT, zał. 1).",
+                    out.add(rule, WARNING, f"minUdzialPowierzchniBiologicznieCzynnej={bio} poniżej "
+                                           f"minimum {minimum}% dla strefy {entry['symbol']} (zał. 1 do "
+                                           f"rozp. MRiT) — niżej tylko wtedy, gdy obszar strefy obejmują "
+                                           f"obowiązujące plany miejscowe, i nie niżej niż najwyższy "
+                                           f"wskaźnik PBC w tych planach (§ 2 ust. 3); wymaga "
+                                           f"weryfikacji z MPZP.",
                             zone, "minUdzialPowierzchniBiologicznieCzynnej")
         if not zone.geometry.get("geometria"):
             out.add(rule, ERROR, "Strefa nie ma geometrii.", zone, "geometria")
