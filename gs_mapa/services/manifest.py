@@ -2,7 +2,7 @@
 
 import logging
 import json
-from typing import Optional, Callable
+from typing import Optional
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
 from ..core.config import MANIFEST_URL
@@ -11,6 +11,7 @@ from .manifest_parser import ManifestParser
 from .manifest_fetcher import ManifestFetcher
 
 logger = logging.getLogger("GSMapa.Manifest")
+
 
 class ManifestService(QObject):
     """
@@ -27,7 +28,7 @@ class ManifestService(QObject):
         self._parser = ManifestParser()
         self._fetcher = ManifestFetcher()
         self._last_valid_manifest: Optional[ManifestModel] = None
-        
+
         # Połączenie sygnałów fetchera
         self._fetcher.finished.connect(self._on_fetch_finished)
         self._fetcher.error.connect(self._on_fetch_error)
@@ -46,13 +47,13 @@ class ManifestService(QObject):
         try:
             json_text = data.decode("utf-8")
             json_data = json.loads(json_text)
-            
+
             manifest = self._parser.parse(json_data)
             self._last_valid_manifest = manifest
-            
+
             logger.info(f"Manifest pomyślnie zaktualizowany. Build ID: {manifest.build_id}")
             self.manifest_updated.emit(manifest)
-            
+
         except json.JSONDecodeError as e:
             self._handle_error(f"Błąd formatu JSON: {str(e)}")
         except ValueError as e:

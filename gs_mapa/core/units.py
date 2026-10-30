@@ -228,6 +228,7 @@ def search_units(text: str, kind: Optional[str] = None, units: Optional[Iterable
             if not all(word in haystack for word in query.split()):
                 continue
         found.append(unit)
+
     def rank(u: Unit):
         name = normalize_text(u.display_name)
         exact = query and (name == query or u.teryt == query)

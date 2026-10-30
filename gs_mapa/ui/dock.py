@@ -5,14 +5,10 @@ import logging
 from qgis.PyQt.QtCore import Qt, QCoreApplication, QTimer
 from qgis.PyQt.QtGui import QKeySequence, QShortcut
 from qgis.PyQt.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
     QMessageBox,
     QDialog,
     QFrame,
-    QPushButton,
     QTabWidget,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -31,7 +27,7 @@ from ..core.act_index import ActIndexEntry, count_by_type, short_title
 from ..services import act_files
 from ..services.download import FileDownloader
 from ..core.units import creator_unit
-from ..core.config import GSMapaConfig, DATA_TYPES, MANIFEST_URL
+from ..core.config import GSMapaConfig, MANIFEST_URL
 from ..core.labels import format_date, plural_layers
 from ..services.manifest import ManifestService
 from ..services.layers import LayerService

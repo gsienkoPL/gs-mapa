@@ -30,7 +30,7 @@ from ..core.app_cut import DrawingDecision, decide_drawings
 from ..core.app_update import ActSource, read_act_source
 from ..core.app_writer import Polygon
 from ..services.app_creator import polygons_of
-from ..services.app_cut import EMPTY_CUT_MESSAGE, EmptyCutError, ExtentCut, cut_extent
+from ..services.app_cut import EmptyCutError, ExtentCut, cut_extent
 from ..services.app_raster import CropError, classify_raster, crop_geotiff
 from . import theme
 

@@ -14,6 +14,7 @@ from .pog_style import apply_pog_style
 
 logger = logging.getLogger("GSMapa.Styling")
 
+
 class StylingService:
     """
     Provides default styles for different types of urban register layers.
@@ -34,10 +35,10 @@ class StylingService:
         Determines and creates the appropriate symbol based on layer type and name.
         """
         is_line = "_linie" in sublayer_name.lower() or "line" in sublayer_name.lower()
-        
+
         if layer_type == "POG":
             return self._create_pog_symbol(is_line, sublayer_name)
-        
+
         # Neutral styles for MPZP, ZPI, PZPW
         if is_line:
             return self._create_simple_line(self.COLOR_LINE, 0.3)
@@ -45,18 +46,18 @@ class StylingService:
 
     def _create_pog_symbol(self, is_line: bool, name: str) -> QgsSymbol:
         name_lower = name.lower()
-        
+
         if is_line:
             # POG Boundaries / Lines
             color = self.COLOR_POG_BOUNDARY if "granica" in name_lower else self.COLOR_LINE
             return self._create_simple_line(color, 0.4)
-        
+
         # POG Fills
         if "ouz" in name_lower or "ozs" in name_lower:
             return self._create_simple_fill(self.COLOR_OUZ_OZS, None, 0.5)
         if "strefa" in name_lower or "stref" in name_lower:
             return self._create_simple_fill(self.COLOR_POG_ZONE, self.COLOR_LINE, 0.1)
-            
+
         return self._create_simple_fill(self.COLOR_POG_ZONE, None, 0.3)
 
     def _create_simple_fill(self, fill_color: QColor, stroke_color: QColor | None, stroke_width: float) -> QgsSymbol:
@@ -87,7 +88,7 @@ class StylingService:
             # Extract info from custom properties set by LayerService
             layer_type = layer.customProperty("gs_mapa_plugin_type")
             sublayer_name = layer.customProperty("gs_mapa_plugin_sublayer")
-            
+
             if not layer_type or not sublayer_name:
                 return
 
@@ -99,9 +100,9 @@ class StylingService:
             symbol = self.get_default_symbol(layer_type, sublayer_name)
             renderer = QgsSingleSymbolRenderer(symbol)
             layer.setRenderer(renderer)
-            
+
             # Trigger redraw
             layer.triggerRepaint()
-            
+
         except Exception as e:
             logger.error(f"Failed to apply style to layer {layer.name()}: {e}")

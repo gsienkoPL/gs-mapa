@@ -337,4 +337,3 @@ class AppSetIdsDialog(QDialog):
         theme.set_html(self.status, theme.span(html.escape(self.tr(
             "Nie udało się zapisać zmian: {0}. Sprawdź, czy pliki nie są otwarte w innym programie.").format(
             message)), "err"))
-

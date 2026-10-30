@@ -10,6 +10,7 @@ MANIFEST_URL = "https://gs-mapa-public.s3.waw.io.cloud.ovh.net/planowanie/tiles/
 # Obsługiwane typy danych
 DATA_TYPES = ["POG", "MPZP", "ZPI", "PZPW"]
 
+
 class GSMapaConfig:
     """Zarządzanie ustawieniami wtyczki."""
 

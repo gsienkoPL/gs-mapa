@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import List
 
-from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
     QAbstractItemView,
     QDialog,

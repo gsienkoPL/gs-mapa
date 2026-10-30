@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from qgis.PyQt.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QFontMetrics, QTextLayout, QTextOption

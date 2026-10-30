@@ -7,7 +7,7 @@ Rejestru Urbanistycznego, map podkładowych i usług GUGiK, a pliki aktów plano
 przestrzennego (APP) pozwala otwierać, tworzyć i walidować — bez bazy danych
 i bez przełączania się między przeglądarką a QGIS-em.
 
-`Wersja 0.1.1` · `QGIS 4.0+` · `Windows · macOS · Linux` · `GPL-3.0`
+`Wersja 0.1.0` · `QGIS 4.0+` · `Windows · macOS · Linux` · `GPL-3.0`
 
 ![Plan ogólny na mapie z oknem informacji o planie](assets/informacja-o-planie.png)
 

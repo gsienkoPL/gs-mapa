@@ -7,6 +7,7 @@ from .gdal_env import ensure_vsicurl_extensions
 
 logger = logging.getLogger("GSMapa.OGRReader")
 
+
 class OGRReader:
     """
     Handles the interaction with PMTiles files using the OGR driver.
@@ -40,13 +41,13 @@ class OGRReader:
             ds = ogr.Open(source, 0)
             if ds is None:
                 raise RuntimeError(f"Could not open dataset: {url}")
-            
+
             layers = []
             for i in range(ds.GetLayerCount()):
                 layer = ds.GetLayerByIndex(i)
                 if layer:
                     layers.append(layer.GetName())
-            
+
             return layers
         except Exception as e:
             logger.error(f"Error reading sublayers from {url}: {e}")
@@ -83,7 +84,7 @@ class OGRReader:
     def create_vector_layer(self, url: str, layer_name: str, label: str) -> QgsVectorLayer:
         """
         Creates a QgsVectorLayer for a specific sub-layer in a PMTiles archive.
-        
+
         :param url: The HTTPS URL of the .pmtiles file.
         :param layer_name: The internal OGR layer name.
         :param label: The display label for the layer in QGIS.
@@ -92,8 +93,8 @@ class OGRReader:
         ensure_vsicurl_extensions()
         source = self.layer_source(url, layer_name)
         layer = QgsVectorLayer(source, label, "ogr")
-        
+
         if not layer.isValid():
             logger.error(f"Created layer is invalid: {source}")
-            
+
         return layer

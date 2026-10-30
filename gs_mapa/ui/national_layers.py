@@ -359,4 +359,3 @@ class NationalLayersPanel(QWidget):
             if item.isExpanded():
                 stack.extend(item.child(i) for i in range(item.childCount()))
         self.tree.setFixedHeight(height + 2 * self.tree.frameWidth() + 2)
-

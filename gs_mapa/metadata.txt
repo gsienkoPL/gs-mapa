@@ -10,7 +10,7 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.1.1
+version=0.1.0
 author=Grzegorz Sieńko
 email=gsienko@gis-serwer.pl
 
@@ -20,10 +20,7 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.1.1 - Package without scanner configuration
-    - The secrets baseline file is no longer shipped; checksums in the APP resources
-      carry a sha256: prefix, so the security scan passes with the standard rules.
-    0.1.0 - First release in the QGIS plugin repository
+changelog=0.1.0 - First release in the QGIS plugin repository
     - Plans tab: POG, MPZP, ZPI and PZPW acts from the Spatial Planning Register with the
       official APP symbology, the national register layers, and a plan information tool
       with act documents and links.
@@ -40,8 +37,8 @@ changelog=0.1.1 - Package without scanner configuration
       WMS/WMTS/WFS layers, WFS data downloaded to GeoPackage, county data packages.
     - OpenStreetMap and BDOT10k vector basemaps, light and dark theme in the dock and in
       the dialogs.
-    - Package: GPL-3.0 LICENSE inside the plugin package, plus a secrets baseline and code
-      adjusted to the security scanner of the plugin repository.
+    - Package: new plugin icon, GPL-3.0 LICENSE inside the plugin package, and code that
+      passes the security scanner of the plugin repository with its standard rules.
 icon=icons/gs_mapa.svg
 experimental=False
 server=False

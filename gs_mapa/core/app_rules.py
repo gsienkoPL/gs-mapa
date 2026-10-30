@@ -26,8 +26,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from .app_gml import (
-    ACT, CODE_SPACE, DOCUMENT, DRAWING, OSDIS, OUZ, OZS, REGULATION_CLASSES, SPATIAL_CLASSES, WFS, ZONE,
-    AppDocument, AppFeature,
+    ACT, CODE_SPACE, DOCUMENT, DRAWING, OSDIS, REGULATION_CLASSES, SPATIAL_CLASSES, WFS, ZONE, AppDocument, AppFeature,
 )
 
 ERROR = "error"
@@ -329,7 +328,6 @@ def _identity(doc: AppDocument, out: _Collector) -> None:
         if count > 1:
             out.add(rule, ERROR, f"Identyfikator IIP {namespace}/{local_id}/{version or ''} powtarza się "
                                  f"{count} razy.", field="idIIP")
-
 
 
 def _object_ids(doc: AppDocument, out: _Collector) -> None:

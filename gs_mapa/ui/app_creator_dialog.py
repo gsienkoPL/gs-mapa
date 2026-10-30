@@ -64,9 +64,8 @@ from ..core.app_field_help import tooltip as field_tooltip
 from ..core.app_links import is_web
 from ..core.app_versioning import reconcile_drawings, reconcile_objects
 from ..core.app_writer import (
-    CL, DATE_TYPES, DEFAULT_LEVEL, DOCUMENT_ROLES, LEVELS, NATURES, POG, ROLE_LABELS, STATUSES, Act, AppPlan,
-    AppWriteError, BaseMap, Document, Drawing, Identity, PlanIssue, check_plan, load_codes, version_id_now,
-    write_app30,
+    DATE_TYPES, DEFAULT_LEVEL, DOCUMENT_ROLES, LEVELS, NATURES, POG, ROLE_LABELS, STATUSES, Act, AppPlan, AppWriteError,
+    BaseMap, Document, Drawing, Identity, PlanIssue, check_plan, load_codes, version_id_now, write_app30,
 )
 from ..core.units import Unit, allowed_act_types, find_unit_by_jpt, jpt_query, unit_query
 from ..services.app_creator import (

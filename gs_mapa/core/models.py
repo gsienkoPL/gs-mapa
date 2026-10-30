@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+
 @dataclass
 class LayerModel:
     """Model pojedynczej warstwy z manifestu."""
@@ -13,6 +14,7 @@ class LayerModel:
     build_id: Optional[str] = None
     #: Nazwy podwarstw zawartych w archiwum (z manifestu).
     layers: List[str] = field(default_factory=list)
+
 
 @dataclass
 class ManifestModel:
@@ -31,6 +33,7 @@ class ManifestModel:
     #: Adres indeksu aktów (``akty/index.json``) do wyszukiwarki; ``None``, gdy niepublikowany.
     acts_index_url: Optional[str] = None
 
+
 @dataclass
 class ActDocument:
     """Dokument aktu planistycznego (plik JSON aktu, pole ``dokumenty``)."""
@@ -48,6 +51,7 @@ class ActDocument:
     data: str = ""
     rozmiar: Optional[int] = None
     content_type: str = ""
+
 
 @dataclass
 class ActDetails:

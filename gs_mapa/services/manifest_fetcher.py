@@ -6,6 +6,7 @@ from qgis.PyQt.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetwork
 
 logger = logging.getLogger("GSMapa.ManifestFetcher")
 
+
 class ManifestFetcher(QObject):
     """
     Pobiera manifest JSON z sieci w sposób nieblokujący.

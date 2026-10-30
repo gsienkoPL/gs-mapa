@@ -66,8 +66,6 @@ class XsdUnavailable(RuntimeError):
     """Brak lxml albo archiwum schematów."""
 
 
-
-
 def _resolver_class():
     from lxml import etree
 

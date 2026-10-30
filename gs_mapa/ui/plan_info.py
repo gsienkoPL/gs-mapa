@@ -33,7 +33,7 @@ from qgis.core import (
 from qgis.gui import QgsMapTool, QgsMapToolEmitPoint
 
 from ..core.colors import box_color, muted_color
-from ..core.act_index import ACT_STATUSES, ActIndexEntry, normalize_text, short_title
+from ..core.act_index import ACT_STATUSES, normalize_text, short_title
 from ..core.app_namespace import parse_namespace
 from ..core.app_codes import coded_values
 from ..core.app_gml import ZONE
@@ -73,6 +73,7 @@ _KIND_MAPA_PODKLADOWA = "mapa_podkladowa"
 #: Nazwy dokumentów bez nazwy pliku (brak kopii w buckecie).
 _DOCUMENT_NAMES = {"akt": "Akt", "dokument": "Dokument", "rysunek": "Rysunek", "legenda": "Legenda",
                    _KIND_MAPA_PODKLADOWA: "Mapa podkładowa"}
+
 
 def _badge(text: str, color: str) -> str:
     """Oznaczenie typu / statusu: pogrubiony tekst w kolorze semantycznym (kolor z ``theme`` — zawsze ze słowem)."""

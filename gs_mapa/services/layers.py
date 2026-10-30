@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, List, Any
-from qgis.core import QgsProject, QgsVectorLayer
+from qgis.core import QgsProject
 from ..core.models import LayerModel, ManifestModel
 from .ogr_reader import OGRReader
 from .styling import StylingService
@@ -10,14 +10,15 @@ from .pog_style import layer_rank
 
 logger = logging.getLogger("GSMapa.Layers")
 
+
 class LayerService:
     """
     Service responsible for adding and removing PMTiles layers in QGIS.
     Ensures no duplicates and tracks layers via custom properties.
     """
-    
+
     PLUGIN_ID = "gs_mapa_plugin"
-    
+
     # Statusy aktualizacji
     STATUS_CURRENT = "Aktualna"
     STATUS_NEWER = "Dostępna nowsza wersja"
@@ -33,12 +34,12 @@ class LayerService:
         """Returns the root group for a specific data type, creating it if necessary."""
         root = QgsProject.instance().layerTreeRoot()
         group_name = f"Rejestr Urbanistyczny / {type_name}"
-        
+
         # Find existing group
         group = root.findGroup(group_name)
         if group:
             return group
-        
+
         # Nowa grupa na górze drzewa — nad mapami podkładowymi, które leżą na spodzie.
         group = root.insertGroup(0, group_name)
         return group
@@ -107,7 +108,7 @@ class LayerService:
     def add_sublayer(self, layer_model: LayerModel, sublayer_name: str, build_id: str) -> bool:
         """
         Adds a specific sub-layer from a PMTiles archive to the QGIS project.
-        
+
         :param layer_model: Model containing the archive URL and type.
         :param sublayer_name: The OGR layer name.
         :param build_id: The manifest build ID.
@@ -125,7 +126,7 @@ class LayerService:
         # 2. Create the layer
         label = f"{layer_model.layer_type} - {sublayer_name}"
         vlayer = self._ogr_reader.create_vector_layer(layer_model.url, sublayer_name, label)
-        
+
         if not vlayer.isValid():
             logger.error(f"Layer {sublayer_name} from {layer_model.url} is invalid.")
             return False
@@ -182,18 +183,18 @@ class LayerService:
     def remove_plugin_layers(self) -> int:
         """
         Removes all layers added by this plugin.
-        
+
         :return: Number of layers removed.
         """
         layers_to_remove = []
         for layer in QgsProject.instance().mapLayers().values():
             if layer.customProperty(f"{self.PLUGIN_ID}_id") == self.PLUGIN_ID:
                 layers_to_remove.append(layer)
-        
+
         count = len(layers_to_remove)
         for layer in layers_to_remove:
             QgsProject.instance().removeMapLayer(layer.id())
-            
+
         logger.info(f"Removed {count} plugin layers from project.")
         return count
 
@@ -234,7 +235,7 @@ class LayerService:
             l_sub = layer.customProperty(f"{self.PLUGIN_ID}_sublayer")
             l_build = layer.customProperty(f"{self.PLUGIN_ID}_build")
             l_url = layer.customProperty(f"{self.PLUGIN_ID}_url")
-            
+
             # Szukaj dopasowania w manifeście po typie i nazwie podwarstwy
             # (URL może się zmienić między buildami)
             matched_model = None
@@ -244,7 +245,7 @@ class LayerService:
                     if l_sub in self._get_sublayers(ds, sublayers_cache):
                         matched_model = ds
                         break
-            
+
             if not matched_model:
                 updates[layer_id] = {
                     "status": self.STATUS_UNAVAILABLE,
@@ -253,7 +254,7 @@ class LayerService:
                     "new_model": None
                 }
                 continue
-            
+
             if l_build == manifest.build_id:
                 updates[layer_id] = {
                     "status": self.STATUS_CURRENT,
@@ -268,7 +269,7 @@ class LayerService:
                     "current_url": l_url, "new_url": matched_model.url,
                     "new_model": matched_model
                 }
-        
+
         return updates
 
     def safe_update_layer(self, layer_id: str, new_model: LayerModel, build_id: str) -> bool:
@@ -279,41 +280,40 @@ class LayerService:
         if not old_layer:
             logger.error(f"Layer {layer_id} not found in project.")
             return False
-            
+
         sublayer_name = old_layer.customProperty(f"{self.PLUGIN_ID}_sublayer")
         if not sublayer_name:
             logger.error(f"Layer {layer_id} is missing sublayer metadata.")
             return False
-            
+
         # 1. Utwórz nową warstwę (tymczasową)
         label = old_layer.name()
         new_layer = self._ogr_reader.create_vector_layer(new_model.url, sublayer_name, label)
-        
+
         if not new_layer or not new_layer.isValid():
             logger.error(f"New version of layer {sublayer_name} is invalid. Aborting update.")
             return False
-            
+
         # 2. Kopiuj właściwości
         new_layer.setCustomProperty(f"{self.PLUGIN_ID}_id", self.PLUGIN_ID)
         new_layer.setCustomProperty(f"{self.PLUGIN_ID}_url", new_model.url)
         new_layer.setCustomProperty(f"{self.PLUGIN_ID}_type", new_model.layer_type)
         new_layer.setCustomProperty(f"{self.PLUGIN_ID}_sublayer", sublayer_name)
         new_layer.setCustomProperty(f"{self.PLUGIN_ID}_build", build_id)
-        
+
         # Stylizacja
         self._styling_service.apply_style(new_layer)
-        
+
         # Nazwa i krycie ustawione suwakiem
         new_layer.setName(old_layer.name())
         new_layer.setOpacity(old_layer.opacity())
-        
+
         # 3. Dodaj do projektu i do grupy
         group = self._get_or_create_group(new_model.layer_type)
         self._add_layer_to_group(new_layer, group, sublayer_name)
-            
+
         # 4. Usuń starą warstwę
         QgsProject.instance().removeMapLayer(layer_id)
-        
+
         logger.info(f"Successfully updated layer {sublayer_name} to build {build_id}")
         return True
-

@@ -325,7 +325,6 @@ def _object_values(feature: _Feature) -> SpatialObject:
     )
 
 
-
 def act_from_values(values: dict, geometry: Sequence[list], version_end: Optional[str] = None) -> Act:
     """Akt modelu zapisu z wartości kreatora (``ActSource.act``); ``version_end`` domyka wersję."""
     alt_titles = [title.strip() for title in str(values.get("alt_titles") or "").split("|") if title.strip()]

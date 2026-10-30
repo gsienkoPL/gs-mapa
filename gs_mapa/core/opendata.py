@@ -325,4 +325,3 @@ def sizes_text(received: int, total: int) -> str:
     def mb(value: int) -> str:
         return f"{value / (1024 * 1024):.1f}".replace(".", ",")
     return f"{mb(received)} / {mb(total)} MB" if total > 0 else f"{mb(received)} MB"
-

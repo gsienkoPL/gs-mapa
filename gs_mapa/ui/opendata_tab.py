@@ -7,7 +7,7 @@ i w miejscu przycisku — karta postępu plik po pliku.
 
 import logging
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from qgis.PyQt.QtCore import QTimer, Qt, pyqtSignal
 from qgis.PyQt.QtWidgets import (

@@ -7,18 +7,19 @@ from ..core.models import ManifestModel, LayerModel
 
 logger = logging.getLogger("GSMapa.ManifestParser")
 
+
 class ManifestParser:
     """
     Parsuje JSON manifestu, wyodrębniając pliki .pmtiles i normalizując adresy.
     """
-    
+
     ALLOWED_HOST = "gs-mapa-public.s3.waw.io.cloud.ovh.net"
     S3_ROOT = f"https://{ALLOWED_HOST}/"
 
     def parse(self, data: Dict[str, Any]) -> ManifestModel:
         """
         Główna metoda parsowania manifestu.
-        
+
         :param data: Słownik z treścią JSON manifestu.
         :raises ValueError: Jeśli manifest brakuje wymaganych pól lub zawiera niebezpieczne URL.
         """
@@ -29,7 +30,7 @@ class ManifestParser:
 
         # Wyodrębnianie warstw z zagnieżdżonego obiektu 'types'
         datasets = self._extract_datasets(data.get("types", {}))
-        
+
         # Normalizacja listy typów (klucze z 'types') — wielkie litery, żeby
         # nazwy zgadzały się z listą typów w panelu (DATA_TYPES).
         types_list = [str(name).upper() for name in data["types"].keys()]
@@ -161,13 +162,13 @@ class ManifestParser:
         # Jeśli URL zaczyna się od 'planowanie/tiles/...', dołączamy korzeń bucketa
         if url.startswith("planowanie/tiles/"):
             url = f"{self.S3_ROOT}{url}"
-        
+
         parsed = urllib.parse.urlparse(url)
-        
+
         # Wymagamy HTTPS
         if parsed.scheme != "https":
             raise ValueError(f"Nieobsługiwany protokół {parsed.scheme} dla URL: {url}. Wymagany HTTPS.")
-        
+
         # Weryfikacja hosta (allowlist)
         if parsed.hostname != self.ALLOWED_HOST:
             raise ValueError(f"Zakazany host {parsed.hostname} dla URL: {url}. Dozwolony tylko {self.ALLOWED_HOST}.")

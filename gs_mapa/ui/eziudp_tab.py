@@ -11,7 +11,7 @@ import os
 from typing import List, Optional, Tuple
 
 from qgis.PyQt.QtCore import QTimer, QUrl, Qt, pyqtSignal
-from qgis.PyQt.QtGui import QAction, QDesktopServices, QGuiApplication, QPalette
+from qgis.PyQt.QtGui import QAction, QDesktopServices, QGuiApplication
 from qgis.PyQt.QtWidgets import (
     QApplication,
     QComboBox,

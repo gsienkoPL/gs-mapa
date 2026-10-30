@@ -46,7 +46,7 @@ from qgis.core import (
 from qgis.gui import QgsFileWidget
 
 from ..core.app_recent import plural_objects
-from ..core.app_rules import ERROR, INFO, RULES, SEVERITY_LABELS, WARNING, group_identical
+from ..core.app_rules import ERROR, INFO, RULES, WARNING, group_identical
 from ..services.app_files import SOURCE_PROPERTY, AppFileService
 from ..services.app_open_acts import KIND_FILE, KIND_REGISTRY, OpenAct
 from ..services.app_validation import (
@@ -765,4 +765,3 @@ class AppValidationDialog(QDialog):
     def closeEvent(self, event) -> None:  # noqa: N802 - nazwa z API Qt
         self._service.cancel()
         super().closeEvent(event)
-
