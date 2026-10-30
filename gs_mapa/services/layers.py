@@ -224,8 +224,8 @@ class LayerService:
         Porównuje warstwy w projekcie z aktualnym manifestem.
         """
         updates = {}
-        plugin_layers = [l for l in QgsProject.instance().mapLayers().values()
-                         if l.customProperty(f"{self.PLUGIN_ID}_id") == self.PLUGIN_ID]
+        plugin_layers = [lyr for lyr in QgsProject.instance().mapLayers().values()
+                         if lyr.customProperty(f"{self.PLUGIN_ID}_id") == self.PLUGIN_ID]
         sublayers_cache: Dict[str, List[str]] = {}
 
         for layer in plugin_layers:

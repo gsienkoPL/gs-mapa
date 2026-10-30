@@ -19,11 +19,11 @@ jawnym typem usługi, np. ``WMTS=https://...``.
 import json
 import re
 import unicodedata
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from . import xml_safe
 from .act_index import normalize_text
 
 #: Publiczne API EZiUDP (tylko odczyt).
@@ -524,7 +524,7 @@ def _local(tag) -> str:
     return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
 
 
-def _children(element, name: str) -> List[ET.Element]:
+def _children(element, name: str) -> List[xml_safe.Element]:
     return [c for c in element if _local(c.tag) == name]
 
 
@@ -536,7 +536,7 @@ def _child_text(element, *names: str) -> str:
     return ""
 
 
-def _find(element, *path: str) -> Optional[ET.Element]:
+def _find(element, *path: str) -> Optional[xml_safe.Element]:
     for name in path:
         found = _children(element, name)
         if not found:
@@ -668,8 +668,8 @@ def parse_capabilities(data: bytes) -> Capabilities:
     if len(data) > MAX_CAPABILITIES_BYTES:
         raise EziudpError("Dokument GetCapabilities przekracza limit rozmiaru.")
     try:
-        root = ET.fromstring(data)
-    except ET.ParseError:
+        root = xml_safe.fromstring(data, allow_doctype=True)
+    except xml_safe.ParseError:
         raise EziudpError("Usługa nie zwróciła poprawnego dokumentu GetCapabilities (XML).") from None
     tag = _local(root.tag)
     if tag in ("ServiceExceptionReport", "ExceptionReport"):

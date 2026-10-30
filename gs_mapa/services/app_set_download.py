@@ -24,6 +24,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 from qgis.core import QgsApplication, QgsTask
 
+from ..core.app_links import is_web
 from ..core.app_set import act_file
 
 logger = logging.getLogger("GSMapa.SetDownload")
@@ -81,9 +82,27 @@ def gml_url(entry, template: str = "", opener: Optional[Callable] = None) -> str
     return url
 
 
+def _web_opener() -> urllib.request.OpenerDirector:
+    """
+    Otwieracz obsługujący wyłącznie ``http``/``https``.
+
+    ``urllib.request.urlopen`` zna też ``file:``, ``ftp:`` i ``data:``; adres z indeksu lub opisu
+    aktu w postaci ``file:///…`` czytałby plik lokalny. Bez tych obsług taki adres kończy się
+    błędem „unknown url type”, także po przekierowaniu.
+    """
+    opener = urllib.request.OpenerDirector()
+    for handler in (urllib.request.ProxyHandler(), urllib.request.HTTPHandler(),
+                    urllib.request.HTTPSHandler(), urllib.request.HTTPDefaultErrorHandler(),
+                    urllib.request.HTTPRedirectHandler(), urllib.request.HTTPErrorProcessor()):
+        opener.add_handler(handler)
+    return opener
+
+
 def _open(url: str):
-    """Otwiera adres do odczytu (jedno miejsce dla limitu czasu i testów)."""
-    return urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS)  # noqa: S310 — adresy z manifestu
+    """Otwiera adres do odczytu (jedno miejsce dla limitu czasu i testów); tylko ``http``/``https``."""
+    if not is_web(url):
+        raise OSError(f"Nieobsługiwany adres pliku (dozwolone http/https): {url}")
+    return _web_opener().open(url, timeout=TIMEOUT_SECONDS)
 
 
 def download_act(entry, folder, template: str = "", opener: Optional[Callable] = None,

@@ -59,7 +59,7 @@ def gpkg_target(gml_path: str) -> Path:
     beside = gml.with_name(gml.name + ".gpkg")
     if os.access(gml.parent, os.W_OK):
         return beside
-    digest = hashlib.sha1(str(gml.resolve()).encode()).hexdigest()[:10]
+    digest = hashlib.sha1(str(gml.resolve()).encode(), usedforsecurity=False).hexdigest()[:10]
     cache = Path(QgsApplication.qgisSettingsDirPath(), "cache", "gs_mapa", "app")
     return cache / f"{gml.stem}-{digest}.gml.gpkg"
 
@@ -224,7 +224,7 @@ def add_app_layers(path: str, group_name: Optional[str] = None, project: Optiona
     # Warstwa, której OGR dał inny układ niż plik (np. układ projektu zamiast 2178),
     # rysuje się w innym miejscu mapy bez żadnego komunikatu — układ pliku wygrywa.
     enforce_file_crs(layers, path)
-    layers.sort(key=lambda l: _ORDER.index(l.name()) if l.name() in _ORDER else len(_ORDER))
+    layers.sort(key=lambda lyr: _ORDER.index(lyr.name()) if lyr.name() in _ORDER else len(_ORDER))
     root = project.layerTreeRoot()
     if parent_group:
         parent = root.findGroup(parent_group) or root.insertGroup(0, parent_group)

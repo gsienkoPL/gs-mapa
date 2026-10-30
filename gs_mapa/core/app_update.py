@@ -21,7 +21,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
-from xml.etree import ElementTree
+from . import xml_safe
 
 from .app_gml import (
     ACT, APP_CLASSES, DOCUMENT, DRAWING, GML, OSDIS, SPATIAL_CLASSES, WFS, XLINK, ZONE,
@@ -409,7 +409,7 @@ def read_act_source(path) -> ActSource:
     depth = 0
     root = None
     try:
-        for event, item in ElementTree.iterparse(str(path), events=("start", "end")):
+        for event, item in xml_safe.iterparse(path, events=("start", "end")):
             if event == "start":
                 depth += 1
                 if depth == 1:
@@ -432,7 +432,7 @@ def read_act_source(path) -> ActSource:
                 if root is not None:
                     root.clear()
             depth -= 1
-    except ElementTree.ParseError as e:
+    except xml_safe.ParseError as e:
         raise AppGmlError(f"Plik nie jest poprawnym XML: {e}") from e
     if not acts:
         raise AppGmlError("Plik nie zawiera aktu planowania przestrzennego (AktPlanowaniaPrzestrzennego).")

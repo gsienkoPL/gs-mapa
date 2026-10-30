@@ -1,8 +1,8 @@
 """Odczyt pliku GML aktu planowania przestrzennego (APP 2.0 i 3.0) — czysty Python.
 
-Plik czytany jest strumieniowo (``xml.etree.ElementTree.iterparse``): po przetworzeniu
-każdego ``wfs:member`` drzewo jest czyszczone, więc nawet plan ogólny dużego miasta
-(kilkadziesiąt MB, ponad 10 tys. stref) nie trzyma całego dokumentu w pamięci.
+Plik czytany jest strumieniowo (``xml_safe.iterparse``, czyli ``ElementTree.iterparse``
+po kontroli DTD i encji): po przetworzeniu każdego ``wfs:member`` drzewo jest czyszczone,
+więc nawet plan ogólny dużego miasta (kilkadziesiąt MB, ponad 10 tys. stref) nie trzyma całego dokumentu w pamięci.
 Geometria nie jest tu interpretowana — sprawdza ją QGIS (``services/app_geometry.py``).
 
 Moduł nie zależy od QGIS ani od lxml (testy bez QGIS, walidacja reguł także bez lxml).
@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import re
 from typing import Dict, Iterator, List, Optional, Set, Tuple
-from xml.etree import ElementTree
+from . import xml_safe
 
 WFS = "http://www.opengis.net/wfs/2.0"
 GML = "http://www.opengis.net/gml/3.2"
@@ -237,10 +237,10 @@ class AppDocument:
 
 
 def _check_prolog(path: Path) -> None:
-    with open(path, "rb") as handle:
-        prolog = handle.read(_PROLOG_BYTES).upper()
-    if b"<!DOCTYPE" in prolog or b"<!ENTITY" in prolog:
-        raise AppGmlError("Plik zawiera deklarację DTD lub encji — odrzucono ze względów bezpieczeństwa.")
+    try:
+        xml_safe.check_file(path)
+    except xml_safe.UnsafeXmlError:
+        raise AppGmlError("Plik zawiera deklarację DTD lub encji — odrzucono ze względów bezpieczeństwa.") from None
 
 
 def _read_feature(element, index: int, app_ns: str) -> AppFeature:
@@ -309,7 +309,7 @@ def read_app_gml(path) -> AppDocument:
     root = None
     member_index = -1
     try:
-        for event, item in ElementTree.iterparse(str(path), events=("start-ns", "start", "end")):
+        for event, item in xml_safe.iterparse(path, events=("start-ns", "start", "end")):
             if event == "start-ns":
                 declared.add(item[1])
                 continue
@@ -334,7 +334,7 @@ def read_app_gml(path) -> AppDocument:
                 if root is not None:
                     root.clear()
             depth -= 1
-    except ElementTree.ParseError as e:
+    except xml_safe.ParseError as e:
         raise AppGmlError(f"Plik nie jest poprawnym XML: {e}") from e
     if root is None:
         raise AppGmlError("Plik jest pusty.")
@@ -383,7 +383,7 @@ def scan_app_classes(path) -> Tuple[Optional[str], List[str]]:
     depth = 0
     root = None
     try:
-        for event, item in ElementTree.iterparse(str(path), events=("start", "end")):
+        for event, item in xml_safe.iterparse(path, events=("start", "end")):
             if event == "start":
                 depth += 1
                 if depth == 1:
@@ -399,7 +399,7 @@ def scan_app_classes(path) -> Tuple[Optional[str], List[str]]:
             if depth == 2 and root is not None:
                 root.clear()
             depth -= 1
-    except ElementTree.ParseError as e:
+    except xml_safe.ParseError as e:
         raise AppGmlError(f"Plik nie jest poprawnym XML: {e}") from e
     return version, classes
 

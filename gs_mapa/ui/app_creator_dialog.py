@@ -2828,7 +2828,7 @@ class AppCreatorDialog(QDialog):
         geometry = []
         layer = self.extent_layer.currentLayer()
         used = [layer] + [w.layer() for w in self.sources.values() if pog and w.isChecked()]
-        for source_layer in {l.id(): l for l in used if l is not None}.values():
+        for source_layer in {lyr.id(): lyr for lyr in used if lyr is not None}.values():
             epsg = epsg_of(source_layer.crs())
             if epsg != crs:
                 issues.append(PlanIssue("warning", "Układ", f"warstwa {source_layer.name()} "

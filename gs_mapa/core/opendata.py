@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from .powiaty import powiat
+from .sql import quote_identifier
 
 OPENDATA_HOST = "opendata.geoportal.gov.pl"
 OPENDATA_BASE = f"https://{OPENDATA_HOST}/InneDane/latest_exports"
@@ -277,7 +278,9 @@ def fix_geometry_types(gpkg_path: str, is_canceled: Callable[[], bool] = lambda:
         for table, column in rows:
             codes = set()
             # Wystarczy nagłówek: 8 bajtów + koperta (do 64) + bajt kolejności + typ (4).
-            for (head,) in connection.execute(f'SELECT substr("{column}", 1, 80) FROM "{table}"'):
+            # Nazwy pochodzą z pliku — jako identyfikatory w cudzysłowie (quote_identifier).
+            query = f"SELECT substr({quote_identifier(column)}, 1, 80) FROM {quote_identifier(table)}"  # nosec B608
+            for (head,) in connection.execute(query):
                 codes.add(gpkg_blob_wkb_type(head))
                 if is_canceled():
                     return changed

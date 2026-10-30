@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from . import xml_safe
 from .app_gml import APP_NAMESPACES, GML, WFS, XLINK, XMLDSIG
 
 XSD_ROOT = Path(__file__).resolve().parent.parent / "resources" / "app" / "xsd"
@@ -166,9 +167,9 @@ def validate_xsd(path, version: str, limit: int = DEFAULT_ERROR_LIMIT) -> XsdRes
         return XsdResult(version, executed=False, skipped=str(e))
     from lxml import etree
 
-    with open(path, "rb") as handle:
-        prolog = handle.read(64 * 1024).upper()
-    if b"<!DOCTYPE" in prolog or b"<!ENTITY" in prolog:
+    try:
+        xml_safe.check_file(path)
+    except xml_safe.UnsafeXmlError:
         return XsdResult(version, errors=[(None, "Plik zawiera deklarację DTD lub encji.")], error_count=1)
     try:
         tree = etree.parse(str(path), _secure_parser(huge=True))

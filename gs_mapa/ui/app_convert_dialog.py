@@ -241,7 +241,9 @@ class AppConvertDialog(QDialog):
             self._update_buttons()
             return
         result = outcome.result
-        assert result is not None
+        if result is None:  # ok bez wyniku nie powinno wystąpić — nie zgłaszaj pustego raportu
+            self._update_buttons()
+            return
         lines = [f"<b>{Path(outcome.target).name}</b> — {result.summary()} ({outcome.seconds} s)"]
         xsd = outcome.xsd
         if xsd is None:

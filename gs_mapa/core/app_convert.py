@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, Iterator, List, Optional, Tuple
-from xml.etree import ElementTree
+from . import xml_safe
 
 from .app_gml import (
     ACT, APP_CLASSES, APP_NAMESPACES, DOCUMENT, DRAWING, GML, WFS, XLINK, XMLDSIG, XSI,
@@ -161,7 +161,7 @@ def _iter_members(path: Path) -> Iterator[Tuple[str, object]]:
     depth = 0
     root = None
     try:
-        for event, item in ElementTree.iterparse(str(path), events=("start", "end")):
+        for event, item in xml_safe.iterparse(path, events=("start", "end")):
             if event == "start":
                 depth += 1
                 if depth == 1:
@@ -182,7 +182,7 @@ def _iter_members(path: Path) -> Iterator[Tuple[str, object]]:
                     yield "other", item
                 root.clear()
             depth -= 1
-    except ElementTree.ParseError as e:
+    except xml_safe.ParseError as e:
         raise AppGmlError(f"Plik nie jest poprawnym XML: {e}") from e
     if root is None:
         raise AppGmlError("Plik jest pusty.")
@@ -335,7 +335,7 @@ def _insert(feature, ns: str, name: str, value: str, order: Tuple[str, ...]) -> 
         if child_ns == ns and local in after:
             position = index
             break
-    new = ElementTree.Element(f"{{{ns}}}{name}")
+    new = xml_safe.Element(f"{{{ns}}}{name}")
     new.text = value
     reference = children[position - 1] if position > 0 else None
     new.tail = reference.tail if reference is not None and reference.tail else None

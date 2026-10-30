@@ -70,6 +70,7 @@ from ..core.app_gml import ACT, ZONE
 from ..core.app_writer import POG
 from ..core.app_layers import LAYERS, Layer, layers_for
 from ..core.app_rules import SUPPORTED_EPSG
+from ..core.sql import quote_identifier
 
 logger = logging.getLogger("GSMapa.AppTemplate")
 
@@ -565,7 +566,7 @@ def _tables_in(connection) -> List[str]:
 
 
 def _columns(connection, table: str) -> List[str]:
-    return [row[1] for row in connection.execute(f'PRAGMA table_info("{table}")').fetchall()]
+    return [row[1] for row in connection.execute(f"PRAGMA table_info({quote_identifier(table)})").fetchall()]
 
 
 def _update_descriptions(connection, table: str, columns: List[str],

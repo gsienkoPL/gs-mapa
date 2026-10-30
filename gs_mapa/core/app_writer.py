@@ -25,8 +25,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
-from xml.sax.saxutils import escape, quoteattr
 
+from .xml_safe import escape, quoteattr
 from .app_gml import ACT, CODE_SPACE, DOCUMENT, DRAWING, GML, OSDIS, OUZ, OZS, WFS, XLINK, XSI, ZONE
 from .app_namespace import namespace_mismatch
 from .app_rules import CODELISTS_PATH, LOCAL_PLAN_TYPES, SUPPORTED_EPSG

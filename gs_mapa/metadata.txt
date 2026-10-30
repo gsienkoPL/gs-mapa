@@ -10,7 +10,7 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.1.7
+version=0.1.0
 author=Grzegorz Sieńko
 email=gsienko@gis-serwer.pl
 
@@ -20,68 +20,25 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.1.7 - LICENSE file in the plugin package, GPL-3.0
-    - The plugin package now ships a LICENSE file (gs_mapa/LICENSE), required by the
-      QGIS plugin repository since June 2024, so the plugin can be listed there.
-    - Licence changed from GPL-2.0-or-later to GPL-3.0; the repository and the package
-      carry the same licence text.
-    0.1.6 - Act validation from the map and unit clearing
-    - Validation window: a "Z aktów w QGIS…" button picks an act or an APP file already
-      loaded in the current project and validates it directly, without pointing at a path
-      on disk (acts from the Register need no manual GML download).
-    - Context bar: a trash button clears the selected unit in one click, without opening
-      the unit chooser; it is visible only while a unit is set.
-    - Plans tab: act layers are downloaded to the download folder and opened from disk
-      instead of being read over the network, so acts from units whose name contains
-      a space (e.g. "Biała Podlaska") open instead of ending with "Nie udało się otworzyć".
-    0.1.5 - File preview, whole-set conversion and document downloads
-    - "Szczegóły": an APP file opened read-only from the recent-files list, with the act,
-      document and drawing details and no editing.
-    - Documents and drawings: a "Pobierz…" link instead of a raw address, download to a
-      folder and adding the file to the map.
-    - Whole set: APP version column and bulk conversion to APP 3.0; an act already in the
-      Register is converted as a new version (new wersjaId, previous file kept as .bak).
-    - Whole set: all acts added to the map, bulk identifier changes for acts outside the
-      Register, publication state read from the Register, new window layout.
-    - Creator: object version taken from local midnight and "obowiązuje do" derived from
-      the end of the version.
-    - Basemaps: vector only (OpenStreetMap, BDOT10k) — the raster path is gone.
-    0.1.4 - Cutting a new plan area and whole-set checks
-    - "Wytnij obszar nowego planu…" for local plans: a new act boundary from a new plan
-      GML file or a project layer, GeoTIFF drawings cropped to the new boundary, and
-      drawings retired or re-versioned with a note about the cut.
-    - Objects that are no longer in the new data are retired instead of removed:
-      same wersjaId, status obsolete and an end of validity date.
-    - "Zbiór z katalogu…": identifier checks across a whole set before publication
-      (namespace collisions, shared objects, duplicates, already published acts).
-    - "Pobierz z Rejestru…": all acts of a unit downloaded from the Register index
-      into a working folder in one go and analysed as a set.
-    - Act index entries carry data addresses (gml, gpkg) and the set namespace.
-    0.1.3 - Template GeoPackage and APP wizard
-    - The template GeoPackage supplies form cards, field hints, defaults and constraints;
-      zone profiles are filtered by zone kind and the primary profile is computed.
-    - Creator: geometry checks before saving (gaps, overlaps, act boundary), document and
-      drawing links, repeated designations, one-click fixes and field counters.
-    - Organ, journal and effective date taken from the unit and the resolution; minimum
-      PBC share from the regulation; "Waliduj" action in the act menu of the Plans tab.
-    - "Wczytaj z pliku" wizard for GPKG table editing, act identification in GPKG and GML
-      layers, status and version of an object uniform for the whole act.
-    0.1.2 - Author details updated
-    - Author name "Grzegorz Sieńko" (with the Polish diacritic) and contact address
-      gsienko@gis-serwer.pl in metadata.txt and README.
-    0.1.1 - Package and metadata fixes for the QGIS plugin repository
-    - Description and about in English, a changelog field, the Web category and English tags.
-    - APP XSD schemas shipped as unpacked files instead of the app_xsd.zip archive.
-    - Fresh screenshots of the dock, the APP wizard and the validation window.
-    0.1.0 - First public release
-    - Plans tab: spatial planning register acts (POG, MPZP, ZPI, PZPW) with official symbology,
-      national layers of the register and the plan information tool with act documents.
-    - GUGiK tab: search of EZiUDP data sets, WMS/WMTS/WFS layers, WFS download to GeoPackage
-      and county data packages (cadastral parcels, buildings, property price register).
-    - APP Files tab: acts opened with the official APP styles, GML validation against
-      APP 2.0/3.0, conversion to APP 3.0 and a wizard for new acts.
-    - OpenStreetMap and BDOT10k basemaps as raster or vector layers.
-    - Light and dark theme support in the dock and in the dialogs.
+changelog=0.1.0 - First release in the QGIS plugin repository
+    - Plans tab: POG, MPZP, ZPI and PZPW acts from the Spatial Planning Register with the
+      official APP symbology, the national register layers, and a plan information tool
+      with act documents and links.
+    - Whole set: acts of a unit downloaded from the Register index, identifier checks
+      before publication (namespace collisions, shared objects, duplicates, acts already
+      published), an APP version column and bulk conversion to APP 3.0.
+    - APP Files tab: acts opened with the official styles, a read-only file preview, GML
+      validation against APP 2.0/3.0 (XSD, specification rules, geometry) from a file or
+      from acts already loaded in the project, and conversion of older versions to APP 3.0.
+    - APP creator: a wizard for new local, general and integrated plans, a template
+      GeoPackage with forms and codelists, cutting the area of a new plan with drawings
+      cropped to the new boundary, objects retired instead of deleted.
+    - GUGiK tab: search of the EZiUDP catalogue of spatial data sets and services,
+      WMS/WMTS/WFS layers, WFS data downloaded to GeoPackage, county data packages.
+    - OpenStreetMap and BDOT10k vector basemaps, light and dark theme in the dock and in
+      the dialogs.
+    - Package: GPL-3.0 LICENSE inside the plugin package, plus a secrets baseline and code
+      adjusted to the security scanner of the plugin repository.
 icon=icons/gs_mapa.svg
 experimental=False
 server=False
