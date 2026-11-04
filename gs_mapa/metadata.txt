@@ -10,7 +10,7 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.2.0
+version=0.3.0
 author=Grzegorz Sieńko
 email=gsienko@gis-serwer.pl
 
@@ -20,7 +20,12 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.2.0 - Biological surface minimum below the regulation value is a warning
+changelog=0.3.0 - Repeal of areas in the municipal general plan
+    - General plan (POG) area repeal: cut areas out of the act in one wizard flow; repealed
+      zones stay in the file with the document date, replacement parts become new objects,
+      and a designation registry prevents reusing any earlier identifier or number.
+    - EZiUDP catalog: unnamed WMS group entries no longer interrupt the services tree.
+    0.2.0 - Biological surface minimum below the regulation value is a warning
     - General plan validation: a minimum biologically active surface share below the value in
       the regulation annex is reported as a warning with its legal basis (§ 2(3): a zone
       covered by binding local plans may go lower, but not below their own indicator), not as

@@ -2891,7 +2891,11 @@ class AppCreatorDialog(QDialog):
                         "uchwalenie nowego planu) — nowa wersja aktu nie może opierać się wyłącznie na "
                         "dotychczasowej uchwale"))
         objects = []
-        if pog:
+        if self._cut is not None and self._cut.objects:
+            # Wycięcie POG: obszary nowej wersji z okna (wycofane, nowe z różnicy) — warstwy
+            # stref/OUZ nie budują obiektów w tej operacji (mogłyby podwoić identyfikatory).
+            objects = list(self._cut.objects)
+        elif pog:
             defaults = ObjectDefaults(
                 act_local_id=act.identity.local_id, namespace=namespace, version_id=version_id,
                 version_start=version_start, effective_from=effective_from, effective_to=effective_to,
@@ -3237,17 +3241,12 @@ class AppCreatorDialog(QDialog):
         return replace(plan, objects=objects.current, drawings=current_drawings), previous, report
 
     def _open_cut(self) -> None:
-        """Okno „Wytnij obszar nowego planu…”: nowy zasięg aktu i przycięte rysunki."""
+        """Okno „Wytnij obszar nowego planu…”: nowy zasięg, przycięte rysunki (MPZP) albo obszary POG."""
         source = self._source_for_update()
         if source is None:
             self._log("Kreator APP: wycięcie obszaru wymaga wczytanego aktu do aktualizacji", "UWAGA")
             return
-        if self.plan_type.currentData() == POG:
-            QMessageBox.information(
-                self, self.tr("Wytnij obszar nowego planu"),
-                self.tr("Wycięcie obszaru w planie ogólnym jest w przygotowaniu — obszary (OUZ, OZS, "
-                        "OSDIS) opisuje dokument POG, a nie granica aktu."))
-            return
+        plan_type = self.plan_type.currentData()
         from .app_cut_dialog import AppCutDialog
 
         update_path = str((self._update or {}).get("path") or "")
@@ -3257,9 +3256,12 @@ class AppCreatorDialog(QDialog):
                               version_id=self.version_id.text().strip(),
                               version_start=self._version_start(),
                               act_title=self.title.text().strip(),
-                              drawings=source.drawings,
+                              drawings=[] if plan_type == POG else source.drawings,
                               default_dir=default_dir,
-                              act_path=update_path)
+                              act_path=update_path,
+                              plan_type=str(plan_type),
+                              previous_path=self.previous_output.text().strip(),
+                              effective_date=self._cut_effective_date())
         dialog.set_layers([layer for layer in QgsProject.instance().mapLayers().values()
                            if isinstance(layer, QgsVectorLayer)])
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -3272,7 +3274,34 @@ class AppCreatorDialog(QDialog):
                     if decision.action == "new_version":
                         self._log(f"Kreator APP: rysunek {decision.local_id} — uzupełnij łącze do "
                                   f"przyciętego pliku przed zapisem", "UWAGA")
+                if self._cut.objects:
+                    # POG: plan ogólny obowiązuje w części obszaru (modyfikacja=true); data wejścia
+                    # w życie nadpisuje „obowiązuje od” Aktu (rozstrzygnięcia 1/2/5 instrukcji POG).
+                    self.modification.setCurrentIndex(
+                        max(self.modification.findData(True), 0))
+                    date = QDate.fromString(self._cut.retire_date, "yyyy-MM-dd")
+                    if date.isValid():
+                        self.effective_from.setDate(date)
+                        self._auto_effective = self._cut.retire_date
+                    for line in (self._cut.area_report.lines() if self._cut.area_report else []):
+                        self._log(f"Kreator APP: wycięcie obszaru — {line}")
         self._refresh()
+
+    def _cut_effective_date(self) -> str:
+        """
+        Data wejścia w życie dla wycięcia: z dokumentu unieważniającego albo zmieniającego.
+
+        Rozstrzygnięcia 1/5 instrukcji POG: zarówno ``obowiazujeDo`` wycofanych obszarów, jak
+        i ``obowiazujeOd`` nowych to data wejścia w życie dokumentu — pole z zakładki Dokumenty
+        (``dataWejsciaWZycie``). Gdy dokumentu jeszcze nie ma — początek nowej wersji.
+        """
+        for role in ("uniewaznia", "uchyla", "zmienia"):
+            document = next((item for item in self._documents if item.get("role") == role), None)
+            if document is not None:
+                date = effective_from(document)
+                if date:
+                    return date
+        return self._version_start()[:10]
 
     def _cut_drawings(self, drawings: List[Drawing]) -> List[Drawing]:
         """Rysunki po wycięciu: przycięte w nowej wersji, wycofane, bez zmian (``opis``/``lacze``)."""

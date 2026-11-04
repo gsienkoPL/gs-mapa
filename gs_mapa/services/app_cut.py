@@ -34,7 +34,8 @@ from qgis.core import (
     QgsProject,
 )
 
-from ..core.app_writer import Polygon
+from ..core.app_cut import AREA_ACTIONS, AreaCut, _area_label
+from ..core.app_writer import Polygon, SpatialObject
 from .app_creator import polygons_of
 from .app_geometry import GAP_PIECE_MIN_M2
 
@@ -194,3 +195,84 @@ def _drop_slivers(geometry: QgsGeometry, min_piece_m2: float, warnings: List[str
     if not kept:
         raise EmptyCutError(EMPTY_CUT_MESSAGE)
     return QgsGeometry(kept[0]) if len(kept) == 1 else QgsGeometry.unaryUnion(kept)
+
+
+# --- wycięcie obszarów (strefy, OUZ, OZS, OSDIS) -------------------------------------
+
+
+def cut_objects(objects: Sequence[SpatialObject], cut: Sequence[Polygon], crs: int,
+                min_piece_m2: float = GAP_PIECE_MIN_M2,
+                cut_crs: Optional[int] = None, inset_m: float = 0.0) -> List[AreaCut]:
+    """
+    Rozstrzyga wycięcie dla każdego obszaru (strefy, OUZ, OZS, OSDIS) bez zapisania czegokolwiek.
+
+    Czynności: obszar cały w wycięciu → ``retire`` (wycofanie bez nowej wersji),
+    przecięty → ``replaced`` (każda część to osobny przyszły obiekt — przecięcie na
+    dwie części daje dwa nowe obiekty), nietknięty → ``unchanged`` (geometria bez zmian:
+    różnicy nie liczy się nawet, gdy wycięcie styka się z granicą obszaru).
+
+    :param objects: obszary zebrane z warstw albo z pliku (``SpatialObject``, układ ``crs``).
+    :param cut: wycięcie (lista wieloboków jako listy pierścieni; układ ``cut_crs`` albo ``crs``).
+    :param crs: układ pliku aktu (EPSG:2176–2180).
+    :param min_piece_m2: kawałki mniejsze niż tyle m² (i ubytek mniejszy niż tyle) to szum
+        numeryczny po różnicy — zostają odrzucone albo traktowane jako „bez zmian”.
+    :param cut_crs: układ wycięcia, gdy różni się od układu aktu (np. warstwa projektu).
+    :param inset_m: cofnięcie granicy wycięcia o tyle metrów — ta sama linia co w
+        ``cut_extent``, żeby zasięg i obszary rozliczyły to samo wycięcie.
+    :raises ValueError: nieznany układ odniesienia, wycięcie bez geometrii, obszar
+        bez geometrii (geometria jest wymagana przez schemat) albo cofnięcie granicy
+        usuwające całe wycięcie.
+    """
+    target = QgsCoordinateReferenceSystem.fromEpsgId(int(crs))
+    if not target.isValid():
+        raise ValueError(f"nieznany układ odniesienia EPSG:{crs}")
+    cutter = _geometry_of(cut)
+    if cutter.isEmpty():
+        raise ValueError("wycięcie nie ma geometrii")
+    if cut_crs is not None and int(cut_crs) != int(crs):
+        cutter.transform(QgsCoordinateTransform(QgsCoordinateReferenceSystem.fromEpsgId(int(cut_crs)),
+                                                target, QgsProject.instance()))
+    cutter = _valid(cutter, "wycięcie", [])
+    if inset_m and float(inset_m) > 0:
+        inset = cutter.buffer(-float(inset_m), BUFFER_SEGMENTS)
+        if inset.isEmpty() or inset.area() <= 0:
+            raise ValueError(f"cofnięcie granicy o {float(inset_m):g} m usuwa całe wycięcie")
+        cutter = inset
+    return [_cut_one(obj, cutter, min_piece_m2) for obj in objects]
+
+
+def _cut_one(obj: SpatialObject, cutter: QgsGeometry, min_piece_m2: float) -> AreaCut:
+    """Rozstrzygnięcie dla jednego obszaru; obszarów nietkniętych geometria nie rusza."""
+    name = _area_label(obj)
+    geometry = _geometry_of([obj.geometry])
+    if geometry.isEmpty():
+        raise ValueError(f"{name}: obiekt nie ma geometrii")
+    area = geometry.area()
+    if not (geometry.boundingBox().intersects(cutter.boundingBox()) and geometry.intersects(cutter)):
+        return AreaCut(source=obj, action="unchanged", kept_area=area)
+    warnings: List[str] = []
+    result = _valid(geometry.difference(cutter), f"wycięcie {name}", warnings)
+    if result.isEmpty() or result.area() <= 0:
+        return AreaCut(source=obj, action="retire", removed_area=area, kept_area=0.0,
+                       warnings=warnings)
+    dropped, kept = 0, []
+    for part in _parts(result):
+        if part.area() >= min_piece_m2:
+            kept.append(part)
+        else:
+            dropped += 1
+    if dropped:
+        warnings.append(f"pominięto {dropped} kawałek/kawałki mniejsze niż {min_piece_m2:g} m² "
+                        f"(szum numeryczny po różnicy geometrii)")
+    kept_area = sum(part.area() for part in kept)
+    polygons: List[Polygon] = []
+    for part in kept:
+        polygons.extend(polygons_of(part))
+    if not polygons or kept_area <= 0:
+        warnings.append("po odrzuceniu szumu numerycznego nie zostaje geometria — wycofanie bez nowej wersji")
+        return AreaCut(source=obj, action="retire", removed_area=area, kept_area=0.0,
+                       warnings=warnings)
+    if area - kept_area <= min_piece_m2:
+        return AreaCut(source=obj, action="unchanged", kept_area=area, warnings=warnings)
+    return AreaCut(source=obj, action="replaced", parts=polygons, removed_area=area - kept_area,
+                   kept_area=kept_area, warnings=warnings)

@@ -69,6 +69,13 @@ class AppHelpDialog(QDialog):
                     "przepisywany jest na APP 3.0: przestrzeń nazw i schemat 3.0, kolekcja "
                     "wfs:FeatureCollection, wymagane w 3.0 daty. Identyfikatory i geometria "
                     "zostają bez zmian, a każda zmiana treści trafia do raportu."),
+            self.tr("Nowa wersja i wycięcie obszaru (Edytuj albo Wczytaj z pliku, karta „Pliki APP”) — "
+                    "akt wczytany jako nowa wersja: te same identyfikatory, nowa wersjaId. "
+                    "Przycisk „Wytnij obszar nowego planu…” otwiera okno wycięcia: w planie "
+                    "miejscowym obniża granicę aktu i przycina rysunki, w planie ogólnym rozlicza "
+                    "strefy i regulacje (OUZ, OZS, OSDIS) — wycofane zostają z datą z dokumentu "
+                    "(decyzja o unieważnieniu albo uchwała zmieniająca w zakładce Dokumenty), "
+                    "a części po wycięciu dostają nowe oznaczenia z podpowiedzi."),
             self.tr("Walidacja (Waliduj…) — sprawdza zgodność z urzędowym XSD, reguły "
                     "specyfikacji (identyfikatory, relacje, listy kodowe, OCL) oraz geometrię "
                     "w QGIS. Raport można zapisać jako CSV."),

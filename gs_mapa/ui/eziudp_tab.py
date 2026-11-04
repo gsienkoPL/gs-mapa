@@ -580,15 +580,18 @@ class EziudpTab(QWidget):
     def _fill_layers(self, endpoint_item: QTreeWidgetItem, caps: Capabilities) -> None:
         _, (record, endpoint) = endpoint_item.data(_COL_NAME, _ROLE)
         self._tree.blockSignals(True)
-        endpoint_item.takeChildren()
-        endpoint_item.setText(_COL_STATE, "")
-        if caps.kind != endpoint.kind:
-            endpoint_item.setText(_COL_NAME, f"{caps.kind}: {endpoint.url}")
-        if not caps.named_layers():
-            self._add_placeholder(endpoint_item, self.tr("Usługa nie udostępnia warstw."))
-        for layer in caps.layers:
-            self._add_layer_item(endpoint_item, record, endpoint, caps, layer)
-        self._tree.blockSignals(False)
+        try:
+            endpoint_item.takeChildren()
+            endpoint_item.setText(_COL_STATE, "")
+            if caps.kind != endpoint.kind:
+                endpoint_item.setText(_COL_NAME, f"{caps.kind}: {endpoint.url}")
+            if not caps.named_layers():
+                self._add_placeholder(endpoint_item, self.tr("Usługa nie udostępnia warstw."))
+            for layer in caps.layers:
+                self._add_layer_item(endpoint_item, record, endpoint, caps, layer)
+        finally:
+            # Wyjątek w wypełnianiu nie może zostawić drzewa ze zblockowanymi sygnałami.
+            self._tree.blockSignals(False)
         self._refresh_states()
         self._update_add_button()
 
@@ -611,7 +614,10 @@ class EziudpTab(QWidget):
         parent.addChild(item)
         for child in layer.children:
             self._add_layer_item(item, record, endpoint, caps, child)
-        item.setExpanded(len(layer.children) > 0 and parent.data(_COL_NAME, _ROLE)[0] == _ENDPOINT)
+        # Grupa bez identyfikatora (tylko tytuł, np. WMS ArcGIS) nie ma danych w _ROLE, więc
+        # rodzic daje wtedy ("",). Rozwijamy potomków usługi i łańcuch grup aż do nazwanych warstw.
+        parent_role = parent.data(_COL_NAME, _ROLE) or ("",)
+        item.setExpanded(len(layer.children) > 0 and parent_role[0] in (_ENDPOINT, ""))
 
     def _iter_items(self, kind: str):
         stack = [self._tree.topLevelItem(i) for i in range(self._tree.topLevelItemCount())]

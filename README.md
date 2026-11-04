@@ -7,7 +7,7 @@ Rejestru Urbanistycznego, map podkładowych i usług GUGiK, a pliki aktów plano
 przestrzennego (APP) pozwala otwierać, tworzyć i walidować — bez bazy danych
 i bez przełączania się między przeglądarką a QGIS-em.
 
-`Wersja 0.2.0` · `QGIS 4.0+` · `Windows · macOS · Linux` · `GPL-3.0`
+`Wersja 0.3.0` · `QGIS 4.0+` · `Windows · macOS · Linux` · `GPL-3.0`
 
 ![Plan ogólny na mapie z oknem informacji o planie](assets/informacja-o-planie.png)
 
@@ -23,7 +23,8 @@ i bez przełączania się między przeglądarką a QGIS-em.
   dodawanie usług WMS / WMTS / WFS, pobieranie WFS do GeoPackage oraz pakiet danych
   powiatu: działki i budynki z EGiB, transakcje z Rejestru Cen Nieruchomości.
 * **Pliki APP** — dodawanie aktu GPKG/GML z oficjalnymi stylami, walidacja GML APP 2.0 i 3.0,
-  konwersja starszych wersji do APP 3.0, kreator nowego aktu i wzorcowy GeoPackage.
+  konwersja starszych wersji do APP 3.0, kreator nowego aktu (z wycięciem obszaru planu
+  ogólnego) i wzorcowy GeoPackage.
 * **Jeden panel** — trzy karty (Plany, Pliki APP, GUGiK) i pasek narzędzi, niezależne od
   stylu Qt w systemie: jasny i ciemny motyw wyglądają tak samo dobrze.
 

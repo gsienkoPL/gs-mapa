@@ -26,22 +26,27 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog, QDial
                                  QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 from qgis.gui import QgsFileWidget
 
-from ..core.app_cut import DrawingDecision, decide_drawings
+from ..core.app_cut import (CutReport, DrawingDecision, apply_areas, collect_used_names,
+                            decide_drawings, next_designation)
 from ..core.app_update import ActSource, read_act_source
-from ..core.app_writer import Polygon
+from ..core.app_versioning import KIND_LABELS
+from ..core.app_writer import POG, Polygon, SpatialObject
 from ..services.app_creator import polygons_of
-from ..services.app_cut import EmptyCutError, ExtentCut, cut_extent
+from ..services.app_cut import AreaCut, EmptyCutError, ExtentCut, cut_extent, cut_objects
 from ..services.app_raster import CropError, classify_raster, crop_geotiff
 from . import theme
 
 #: Czynności dla rysunków w tabeli podglądu.
 ACTION_LABELS = {"unchanged": "bez zmian", "new_version": "nowa wersja (przycięty)",
                  "retire": "wycofanie"}
+#: Czynności dla obszarów POG w tabeli podglądu ("co się stanie").
+AREA_LABELS = {"unchanged": "bez zmian", "retire": "wycofanie",
+               "replaced": "wycofany, część → nowy obiekt"}
 
 
 @dataclass
 class AppliedCut:
-    """Wynik okna: nowy zasięg aktu, decyzje dla rysunków i przycięte pliki."""
+    """Wynik okna: nowy zasięg aktu, decyzje dla rysunków (MPZP) albo obszarów (POG) i przycięte pliki."""
 
     extent: List[Polygon]
     before_area: float
@@ -53,10 +58,17 @@ class AppliedCut:
     cropped: Dict[str, str] = field(default_factory=dict)
     warnings: List[str] = field(default_factory=list)
     inset_m: float = 0.0
+    #: POG: obiekty obszarów nowej wersji po ``apply_areas`` (wycofane, nowe z różnicy).
+    objects: List[SpatialObject] = field(default_factory=list)
+    #: POG: raport złożenia obszarów (wycofane / zastąpione / bez zmian).
+    area_report: Optional[CutReport] = None
 
     def report(self) -> str:
         """Krótki opis do panelu uwag kreatora."""
         parts = [self.tr_summary()]
+        if self.area_report is not None:
+            parts.append(self.area_report.summary())
+            parts += self.area_report.lines()
         for decision in self.decisions:
             if decision.action == "retire":
                 parts.append(f"rysunek {decision.local_id}: wycofany (obowiazujeDo {self.retire_date})")
@@ -76,7 +88,8 @@ class AppCutDialog(QDialog):
 
     def __init__(self, parent=None, source: Optional[ActSource] = None, crs: int = 2180,
                  version_id: str = "", version_start: str = "", act_title: str = "",
-                 drawings: Sequence[dict] = (), default_dir: str = "", act_path: str = "") -> None:
+                 drawings: Sequence[dict] = (), default_dir: str = "", act_path: str = "",
+                 plan_type: str = "", previous_path: str = "", effective_date: str = "") -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Wytnij obszar nowego planu"))
         self.setMinimumWidth(720)
@@ -88,6 +101,15 @@ class AppCutDialog(QDialog):
         self._drawings = [dict(drawing) for drawing in drawings]
         self._default_dir = default_dir
         self._act_path = act_path
+        self._plan_type = (plan_type or (str((source.act or {}).get("plan_type") or "")
+                                         if source is not None else "")).strip()
+        self._pog = self._plan_type == POG
+        self._areas: List[SpatialObject] = list(source.objects or []) if source is not None else []
+        self._effective_date = (effective_date or "").strip()
+        self._previous_path = (previous_path or "").strip()
+        self._area_rows: List[dict] = []
+        self._area_cuts: Optional[List[AreaCut]] = None
+        self._names, self._registry_warnings = self._registry()
         self._cuts: List[tuple] = []
         self._result: Optional[AppliedCut] = None
         #: Ostatni komunikat błędu (okno pokazuje go inline, bez okna modalnego).
@@ -96,6 +118,32 @@ class AppCutDialog(QDialog):
         self._preview_layer = None
         self._build()
         self._refresh()
+
+    # --- rejestr identyfikatorów (POG) -------------------------------------------
+
+    def _registry(self) -> tuple:
+        """
+        Rejestr identyfikatorów obszarów (``collect_used_names``) i ostrzeżenia jego zbioru.
+
+        Rejestr buduje się tylko w trybie POG; plik poprzedniej wersji (jeśli podany i istnieje)
+        dołącza o swoje identyfikatory — wycięcie nigdy nie powtórzy wartości żadnego
+        wcześniejszego obiektu (także wycofanego). Brak pliku to ostrzeżenie, nie cisza.
+        """
+        if not self._pog:
+            return None, []
+        warnings: List[str] = []
+        sources: List[List[SpatialObject]] = [self._areas]
+        if self._previous_path:
+            try:
+                sources.append(read_act_source(self._previous_path).objects)
+            except (ValueError, OSError) as error:
+                warnings.append(f"nie odczytano pliku poprzedniej wersji ({error}) — "
+                                "wcześniejsze identyfikatory spoza rejestru")
+        else:
+            warnings.append(self.tr("brak pliku poprzedniej wersji — nie można sprawdzić "
+                                    "identyfikatorów wcześniejszych niż wersja aktualizowana"))
+        act_local_id = str((self._source.act or {}).get("local_id") or "") if self._source is not None else ""
+        return collect_used_names(sources, act_local_id=act_local_id), warnings
 
     # --- budowa okna -------------------------------------------------------------
 
@@ -185,23 +233,34 @@ class AppCutDialog(QDialog):
         self.retire_date = QDateEdit()
         self.retire_date.setCalendarPopup(True)
         self.retire_date.setDisplayFormat("yyyy-MM-dd")
-        self.retire_date.setDate(_date_from(self._version_start) or QDate.currentDate())
-        self.retire_date.setToolTip(self.tr("Data obowiazujeDo wycofanych rysunków — domyślnie początek nowej "
-                                            "wersji aktu; przy planie miejscowym zwykle data wejścia w życie "
-                                            "nowego planu"))
-        form.addRow(self.tr("Obowiązuje do (wycofane rysunki)"), self.retire_date)
-        self.output_dir = QgsFileWidget()
-        self.output_dir.setStorageMode(QgsFileWidget.StorageMode.GetDirectory)
-        if self._default_dir:
-            self.output_dir.setFilePath(self._default_dir)
-        form.addRow(self.tr("Katalog na przycięte rysunki"), self.output_dir)
-        self.crop_drawings = QCheckBox(self.tr("Przytnij rysunki (GeoTIFF) do nowej granicy"))
-        self.crop_drawings.setChecked(True)
-        form.addRow("", self.crop_drawings)
-        self.document_hint = QLabel(self.tr(
-            "Pamiętaj o nowym dokumencie formalnym: zmiana granicy aktu wymaga nowej uchwały "
-            "(przystąpienie, uchwalenie, zmiana). Dodaj ją w zakładce Dokumenty i wskaż jako dokument "
-            "uchwalający — dotychczasowa uchwała zostaje tylko w poprzedniej wersji."))
+        if self._pog:
+            self.retire_date.setDate(_date_from(self._effective_date)
+                                     or _date_from(self._version_start) or QDate.currentDate())
+            self.retire_date.setToolTip(self.tr(
+                "Data wejścia w życie dokumentu (decyzja o unieważnieniu albo uchwała zmieniająca) — "
+                "obowiazujeDo wycofanych obszarów i obowiazujeOd nowych (nie zgadujemy)"))
+            form.addRow(self.tr("Data wejścia w życie"), self.retire_date)
+            self.document_hint = QLabel(self.tr(
+                "Pamiętaj o dokumencie w zakładce Dokumenty: decyzja o unieważnieniu albo uchwała "
+                "zmieniająca — z jej daty wejścia w życie bierze się data wycięcia."))
+        else:
+            self.retire_date.setDate(_date_from(self._version_start) or QDate.currentDate())
+            self.retire_date.setToolTip(self.tr("Data obowiazujeDo wycofanych rysunków — domyślnie początek nowej "
+                                                "wersji aktu; przy planie miejscowym zwykle data wejścia w życie "
+                                                "nowego planu"))
+            form.addRow(self.tr("Obowiązuje do (wycofane rysunki)"), self.retire_date)
+            self.output_dir = QgsFileWidget()
+            self.output_dir.setStorageMode(QgsFileWidget.StorageMode.GetDirectory)
+            if self._default_dir:
+                self.output_dir.setFilePath(self._default_dir)
+            form.addRow(self.tr("Katalog na przycięte rysunki"), self.output_dir)
+            self.crop_drawings = QCheckBox(self.tr("Przytnij rysunki (GeoTIFF) do nowej granicy"))
+            self.crop_drawings.setChecked(True)
+            form.addRow("", self.crop_drawings)
+            self.document_hint = QLabel(self.tr(
+                "Pamiętaj o nowym dokumencie formalnym: zmiana granicy aktu wymaga nowej uchwały "
+                "(przystąpienie, uchwalenie, zmiana). Dodaj ją w zakładce Dokumenty i wskaż jako dokument "
+                "uchwalający — dotychczasowa uchwała zostaje tylko w poprzedniej wersji."))
         self.document_hint.setWordWrap(True)
         theme.style_muted(self.document_hint)
         form.addRow("", self.document_hint)
@@ -214,9 +273,13 @@ class AppCutDialog(QDialog):
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels([self.tr("Rysunek"), self.tr("Decyzja"), self.tr("Powód")])
+        if self._pog:
+            self.table.setHorizontalHeaderLabels([self.tr("Obszar"), self.tr("Co się stanie"),
+                                                  self.tr("Nowe oznaczenie")])
+        else:
+            self.table.setHorizontalHeaderLabels([self.tr("Rysunek"), self.tr("Decyzja"), self.tr("Powód")])
+            self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setMinimumHeight(120)
         layout.addWidget(self.table, 1)
         self.warnings = QLabel("")
@@ -336,7 +399,10 @@ class AppCutDialog(QDialog):
             self._error(str(error))
             return None
         self._preview = extent
-        self._fill(extent)
+        if self._pog:
+            self._fill_areas(extent)
+        else:
+            self._fill(extent)
         self._show_preview_layer(extent)
         return extent
 
@@ -352,6 +418,61 @@ class AppCutDialog(QDialog):
             .format(len(extent.extent), extent.holes, _ha(extent.before_area), _ha(extent.after_area),
                     _ha(extent.removed_area)))
         self.warnings.setText(" ".join(extent.warnings))
+
+    def _fill_areas(self, extent: ExtentCut) -> None:
+        """Tabela obszarów POG: co się stanie z każdym obszarem i propozycje nowych oznaczeń."""
+        try:
+            areas = cut_objects(self._areas, self.cut_geometry(), self._crs,
+                                inset_m=self.inset.value() / 100.0)
+        except ValueError as error:
+            self._area_cuts = None
+            self._error(str(error))
+            return
+        self._area_cuts = areas
+        prepared: List[dict] = []
+        for area in areas:
+            if area.action in ("unchanged", "retire"):
+                prepared.append({"cut": area, "part": None, "designation": None})
+            elif self._names is not None:
+                for index in range(len(area.parts)):
+                    prepared.append({"cut": area, "part": index,
+                                     "designation": next_designation(area.source.kind,
+                                                                     area.source.symbol,
+                                                                     self._names.designations)})
+            else:
+                for index in range(len(area.parts)):
+                    prepared.append({"cut": area, "part": index, "designation": ""})
+        self._area_rows = prepared
+        self.table.setRowCount(len(prepared))
+        for row, entry in enumerate(prepared):
+            cut_result, part = entry["cut"], entry["part"]
+            source_label = (f"{KIND_LABELS.get(cut_result.source.kind, cut_result.source.kind)} "
+                            f"{cut_result.source.designation or cut_result.source.identity.local_id}")
+            area_label = source_label + ("" if part is None else
+                                         self.tr(" — część {0} z {1}").format(part + 1, len(cut_result.parts)))
+            self.table.setItem(row, 0, QTableWidgetItem(area_label))
+            self.table.setItem(row, 1, QTableWidgetItem(AREA_LABELS.get(cut_result.action, cut_result.action)))
+            item = QTableWidgetItem(entry["designation"] or "")
+            if part is None:
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.table.setItem(row, 2, item)
+        retired = sum(1 for entry in prepared if entry["cut"].action == "retire")
+        new_objects = sum(1 for entry in prepared if entry["part"] is not None)
+        unchanged = sum(1 for entry in prepared if entry["cut"].action == "unchanged")
+        self.summary.setText(
+            self.tr("Nowy zasięg: {0} części, dziury: {1}; pole {2} ha → {3} ha (ubytek {4} ha). "
+                    "Obszary (plan ogólny): wycofane {5}, nowych obiektów {6}, bez zmian {7}.")
+            .format(len(extent.extent), extent.holes, _ha(extent.before_area), _ha(extent.after_area),
+                    _ha(extent.removed_area), retired, new_objects, unchanged))
+        self.warnings.setText(self._warnings_text(extent))
+
+    def _warnings_text(self, extent: ExtentCut) -> str:
+        """Ostrzeżenia podglądu: zasięg, obszary (szum/naprawy geometrii) i rejestr identyfikatorów."""
+        pieces = list(extent.warnings)
+        for cut_result in (self._area_cuts or []):
+            pieces += cut_result.warnings
+        pieces += self._registry_warnings
+        return " ".join(pieces)
 
     def _decide(self, extent: ExtentCut) -> List[DrawingDecision]:
         """
@@ -378,13 +499,15 @@ class AppCutDialog(QDialog):
                                extent.removed_area, self._version_id)
 
     def apply(self) -> Optional[AppliedCut]:
-        """Licz wszystko, przytnij rysunki i zamknij okno z wynikiem (`AppliedCut`)."""
+        """Licz wszystko (zasięg + obszary albo przycięte rysunki) i zamknij okno z wynikiem."""
         extent = self._preview or self.preview()
         if extent is None:
             return None
+        warnings = list(extent.warnings)
+        if self._pog:
+            return self._apply_areas(extent, warnings)
         decisions = self._decide(extent)
         cropped: Dict[str, str] = {}
-        warnings = list(extent.warnings)
         if self.crop_drawings.isChecked():
             cropped, crop_warnings = self._crop(decisions, extent)
             warnings += crop_warnings
@@ -393,6 +516,34 @@ class AppCutDialog(QDialog):
                                   retire_date=self.retire_date.date().toString("yyyy-MM-dd"),
                                   decisions=decisions, cropped=cropped, warnings=warnings,
                                   inset_m=self.inset.value() / 100.0)
+        self.accept()
+        return self._result
+
+    def _apply_areas(self, extent: ExtentCut, warnings: List[str]) -> Optional[AppliedCut]:
+        """POG: obszary nowej wersji (``apply_areas``) z oznaczeń tabeli; wynik i zamknięcie okna."""
+        if self._area_cuts is None or self._names is None:
+            self._error(self.tr("Brak podglądu rozstrzygnięć obszarów — wybierz najpierw „Podgląd”."))
+            return None
+        overrides: Dict[str, List[str]] = {}
+        for row, entry in enumerate(self._area_rows):
+            if entry["part"] is None:
+                continue
+            item = self.table.item(row, 2)
+            text = ((item.text() if item is not None else entry["designation"]) or "").strip()
+            overrides.setdefault(entry["cut"].source.identity.local_id, []).append(text)
+        date = self.retire_date.date().toString("yyyy-MM-dd")
+        try:
+            objects, report = apply_areas(self._area_cuts, self._names, self._version_id,
+                                          self._version_start, date, date, overrides)
+        except ValueError as error:
+            self._error(str(error))
+            return None
+        warnings += self._registry_warnings + report.warnings
+        self._result = AppliedCut(extent=extent.extent, before_area=extent.before_area,
+                                  after_area=extent.after_area, removed_area=extent.removed_area,
+                                  retire_date=date, cropped={}, warnings=warnings,
+                                  inset_m=self.inset.value() / 100.0,
+                                  objects=objects, area_report=report)
         self.accept()
         return self._result
 
@@ -470,7 +621,8 @@ class AppCutDialog(QDialog):
         self.btn_clear.setEnabled(self.cut_list.count() > 0)
         self.btn_preview.setEnabled(bool(self._cuts))
         self.btn_apply.setEnabled(bool(self._cuts))
-        self.crop_drawings.setEnabled(bool(self._drawings))
+        if not self._pog:
+            self.crop_drawings.setEnabled(bool(self._drawings))
 
     def set_layers(self, layers: Sequence) -> None:
         """Wypełnia listę warstw projektu (wołane przy otwarciu okna i po zmianie projektu)."""
