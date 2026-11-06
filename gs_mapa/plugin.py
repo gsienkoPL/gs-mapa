@@ -63,7 +63,7 @@ class GSMapaPlugin:
         self.manifest_service = ManifestService()
         self.ogr_reader = OGRReader()
         self.layer_service = LayerService(self.ogr_reader)
-        self.basemap_service = BasemapService()
+        self.basemap_service = BasemapService(self.config)
         #: Opisy aktów (pliki ``akty/{act_id}.json``).
         self.act_service = ActService()
         #: Indeks aktów — jedno pobranie na build.
@@ -93,7 +93,7 @@ class GSMapaPlugin:
             info.triggered.connect(self._on_plan_info_triggered)
             self.plan_info_action = info
 
-            self.basemap_menu = BasemapMenu(self.basemap_service, parent)
+            self.basemap_menu = BasemapMenu(self.basemap_service, parent, config=self.config)
             self.basemap_menu.message.connect(self._log)
             self.basemap_menu.menuAction().setObjectName("GSMapaBasemapMenu")
             theme.set_icon(self.basemap_menu.menuAction(), "map", role="WindowText")

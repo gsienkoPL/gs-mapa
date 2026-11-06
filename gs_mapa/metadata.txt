@@ -10,7 +10,7 @@ about=GS Mapa - a QGIS 4 plugin. One dock with product tabs: the Spatial Plannin
     tab opens planning-act GPKG/GML files styled with the official APP symbology, validates
     GML against APP 2.0/3.0 (XSD, specification rules, geometry) without a database, converts
     older versions to APP 3.0 and creates new acts with a wizard.
-version=0.3.0
+version=0.4.0
 author=Grzegorz Sieńko
 email=gsienko@gis-serwer.pl
 
@@ -20,7 +20,14 @@ homepage=https://github.com/gsienkoPL/gs-mapa
 
 category=Web
 tags=map, mapa, polska, Poland, spatial planning, urban planning, GUGiK, WMS, WFS, APP
-changelog=0.3.0 - Repeal of areas in the municipal general plan
+changelog=0.4.0 - Raster (WMTS) basemaps and panel pairing for the API key
+    - Basemap menu: server-rendered raster tiles (WMTS) for OpenStreetMap and BDOT10k
+      with a tile layout choice (Web Mercator, WGS 84, PL-1992, PL-2000 zones), in a
+      menu split into vector and raster sections.
+    - Basemaps use the user API key from the panel: the plugin can pair with the panel
+      itself (device pairing, no pasting), checks the monthly quota and shows refusals
+      above the map.
+    0.3.0 - Repeal of areas in the municipal general plan
     - General plan (POG) area repeal: cut areas out of the act in one wizard flow; repealed
       zones stay in the file with the document date, replacement parts become new objects,
       and a designation registry prevents reusing any earlier identifier or number.

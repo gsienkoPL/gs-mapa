@@ -7,7 +7,7 @@ Rejestru Urbanistycznego, map podkładowych i usług GUGiK, a pliki aktów plano
 przestrzennego (APP) pozwala otwierać, tworzyć i walidować — bez bazy danych
 i bez przełączania się między przeglądarką a QGIS-em.
 
-`Wersja 0.3.0` · `QGIS 4.0+` · `Windows · macOS · Linux` · `GPL-3.0`
+`Wersja 0.4.0` · `QGIS 4.0+` · `Windows · macOS · Linux` · `GPL-3.0`
 
 ![Plan ogólny na mapie z oknem informacji o planie](assets/informacja-o-planie.png)
 
@@ -17,8 +17,8 @@ i bez przełączania się między przeglądarką a QGIS-em.
   zintegrowane i wojewódzkie z Rejestru Urbanistycznego.
 * **Informacja o planie** — klikasz w plan i widzisz jego akt, status i dokumenty;
   dokument otworzysz w przeglądarce albo od razu dodasz do mapy.
-* **Mapy podkładowe** — OpenStreetMap i BDOT10k, jako raster (wygląd jak w przeglądarce)
-  albo wektor (obiekty z atrybutami).
+* **Mapy podkładowe** — OpenStreetMap i BDOT10k, jako raster WMTS (wygląd jak
+  w przeglądarce) albo wektor (obiekty z atrybutami).
 * **Dane GUGiK** — wyszukiwanie zbiorów EZiUDP (także w miejscu wskazanym na mapie),
   dodawanie usług WMS / WMTS / WFS, pobieranie WFS do GeoPackage oraz pakiet danych
   powiatu: działki i budynki z EGiB, transakcje z Rejestru Cen Nieruchomości.

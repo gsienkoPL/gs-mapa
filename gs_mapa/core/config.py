@@ -1,6 +1,7 @@
 """Ustawienia i stałe wtyczki Rejestr Urbanistyczny."""
 
 import json
+import secrets
 
 from qgis.PyQt.QtCore import QSettings
 
@@ -52,6 +53,36 @@ class GSMapaConfig:
     @download_dir.setter
     def download_dir(self, value: str) -> None:
         self._settings.setValue("download_dir", value)
+
+    @property
+    def api_key(self) -> str:
+        """Klucz API użytkownika dla podkładów wektorowych (pusty łańcuch = brak klucza)."""
+        return self._settings.value("api_key", "", type=str)
+
+    @api_key.setter
+    def api_key(self, value: str) -> None:
+        self._settings.setValue("api_key", value or "")
+
+    def ensure_device_secret(self) -> str:
+        """
+        Stały sekret urządzenia do parowania automatycznego z panelem (APP klucz API).
+
+        Generowany raz (secrets.token_urlsafe(32) — 43 znaki `[A-Za-z0-9_-]`,
+        format akceptowany przez kontrakt `POST /polacz/urzadzenie`) i zapisany
+        w ustawieniach pod ``device_secret``; kolejne wywołania zwracają ten sam.
+        Regeneracja nie istnieje w interfejsie — „nowa maszyna” to świadome
+        usunięcie wpisu z ustawień (serwer wtedy utworzy nowe konto urządzenia).
+        Sekret jest po stronie stacji; serwer trzyma tylko jego SHA-256, więc
+        nigdy nie trafia do logów ani komunikatów.
+        """
+        secret = self._settings.value("device_secret", "", type=str)
+        if secret:
+            return secret
+        secret = secrets.token_urlsafe(32)
+        self._settings.setValue("device_secret", secret)
+        # Generacja jest jednorazowa dla maszyny — trwałość zapisu od razu.
+        self._settings.sync()
+        return secret
 
     @property
     def app_unit(self) -> str:
